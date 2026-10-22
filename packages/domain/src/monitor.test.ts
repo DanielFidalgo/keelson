@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DomainValidationError } from './errors.js';
-import { advanceSchedule, newMonitor, updateMonitor } from './monitor.js';
+import { advanceSchedule, approveBaseline, newMonitor, updateMonitor } from './monitor.js';
+import type { SnapshotHash } from './snapshot.js';
 import { problemsOf } from './test-support.js';
 
 const now = new Date('2026-10-22T12:04:59Z');
@@ -55,18 +56,37 @@ describe('newMonitor', () => {
 describe('updateMonitor', () => {
   it('returns a changed copy and leaves the original untouched', () => {
     const original = newMonitor(valid, now);
-    const updated = updateMonitor(original, { name: 'Renamed', status: 'paused', authSecretRef: 'secret/1' });
+    const updated = updateMonitor(original, { name: 'Renamed', status: 'paused', authSecretRef: 'secret/1' }, now);
     expect(updated).toMatchObject({ name: 'Renamed', status: 'paused', authSecretRef: 'secret/1' });
     expect(original.name).toBe('Docs server');
   });
 
   it('can clear the secret reference', () => {
-    const withSecret = updateMonitor(newMonitor(valid, now), { authSecretRef: 'secret/1' });
-    expect(updateMonitor(withSecret, { authSecretRef: null }).authSecretRef).toBeNull();
+    const withSecret = updateMonitor(newMonitor(valid, now), { authSecretRef: 'secret/1' }, now);
+    expect(updateMonitor(withSecret, { authSecretRef: null }, now).authSecretRef).toBeNull();
   });
 
   it('rejects an interval below the minimum', () => {
-    expect(() => updateMonitor(newMonitor(valid, now), { intervalSeconds: 60 })).toThrow(DomainValidationError);
+    expect(() => updateMonitor(newMonitor(valid, now), { intervalSeconds: 60 }, now)).toThrow(DomainValidationError);
+  });
+
+  it('reschedules to the start of the next slot of the new interval when the interval changes', () => {
+    const updated = updateMonitor(newMonitor(valid, now), { intervalSeconds: 600 }, now);
+    expect(updated.nextProbeAt).toEqual(new Date('2026-10-22T12:10:00Z'));
+  });
+
+  it('keeps the schedule when the interval is not part of the change', () => {
+    const original = newMonitor(valid, now);
+    expect(updateMonitor(original, { name: 'Renamed' }, now).nextProbeAt).toEqual(original.nextProbeAt);
+  });
+});
+
+describe('approveBaseline', () => {
+  it('makes the approved snapshot the baseline and leaves the original untouched', () => {
+    const original = newMonitor(valid, now);
+    const hash = 'abc123' as SnapshotHash;
+    expect(approveBaseline(original, hash).baselineHash).toBe(hash);
+    expect(original.baselineHash).toBeNull();
   });
 });
 

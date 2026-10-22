@@ -3,6 +3,10 @@ import type { SecretStore } from '../ports.js';
 export class FakeSecretStore implements SecretStore {
   private readonly values = new Map<string, string>();
 
+  refs(): string[] {
+    return [...this.values.keys()];
+  }
+
   read(ref: string): Promise<string> {
     const value = this.values.get(ref);
     if (value === undefined) return Promise.reject(new Error(`unknown secret ref: ${ref}`));

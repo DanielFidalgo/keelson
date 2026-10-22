@@ -33,6 +33,20 @@ export function newWebhookEndpoint(input: NewWebhookEndpointInput, now: Date): W
   return { ...input, status: 'active', consecutiveFailures: 0, createdAt: new Date(now) };
 }
 
+export interface WebhookEndpointChanges {
+  url?: string;
+  status?: WebhookEndpoint['status'];
+}
+
+export function updateWebhookEndpoint(endpoint: WebhookEndpoint, changes: WebhookEndpointChanges): WebhookEndpoint {
+  const updated: WebhookEndpoint = { ...endpoint, ...changes };
+  const problems = urlProblems(updated.url);
+  if (problems.length > 0) throw new DomainValidationError(problems);
+  // A re-enabled endpoint gets a clean slate, otherwise its first failure would disable it again at once.
+  const reEnabled = endpoint.status === 'disabled' && updated.status === 'active';
+  return reEnabled ? { ...updated, consecutiveFailures: 0 } : updated;
+}
+
 export function recordDeliverySuccess(endpoint: WebhookEndpoint): WebhookEndpoint {
   return { ...endpoint, consecutiveFailures: 0 };
 }

@@ -18,7 +18,7 @@ export class InMemoryTransaction implements Transaction {
   readonly drifts = new InMemoryDrifts();
   readonly incidents = new InMemoryIncidents(this.monitors);
   readonly webhookEndpoints = new InMemoryWebhookEndpoints();
-  readonly outbox = new InMemoryOutbox();
+  readonly outbox = new InMemoryOutbox(this.webhookEndpoints);
   readonly tenants = new InMemoryTenants();
   readonly apiKeys = new InMemoryApiKeys();
 }

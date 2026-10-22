@@ -53,15 +53,25 @@ export function newMonitor(input: NewMonitorInput, now: Date): Monitor {
   };
 }
 
-export function updateMonitor(monitor: Monitor, changes: MonitorChanges): Monitor {
+export function updateMonitor(monitor: Monitor, changes: MonitorChanges, now: Date): Monitor {
   const updated: Monitor = { ...monitor, ...changes };
   assertValid(updated);
-  return updated;
+  return updated.intervalSeconds === monitor.intervalSeconds ? updated : rescheduled(updated, now);
+}
+
+export function approveBaseline(monitor: Monitor, hash: SnapshotHash): Monitor {
+  return { ...monitor, baselineHash: hash };
 }
 
 export function advanceSchedule(monitor: Monitor, now: Date): { monitor: Monitor; slot: number } {
   const slot = slotAt(now, monitor.intervalSeconds);
   return { monitor: { ...monitor, nextProbeAt: slotStart(slot + 1, monitor.intervalSeconds) }, slot };
+}
+
+// Slots of the old interval mean nothing to the new one, so probing resumes at the next boundary of the new grid.
+function rescheduled(monitor: Monitor, now: Date): Monitor {
+  const nextSlot = slotAt(now, monitor.intervalSeconds) + 1;
+  return { ...monitor, nextProbeAt: slotStart(nextSlot, monitor.intervalSeconds) };
 }
 
 function assertValid(fields: ValidatedFields): void {

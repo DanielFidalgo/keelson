@@ -27,6 +27,9 @@ export interface AssessmentContext {
   openDrift: Incident | null;
 }
 
+// What raising an alert needs from the surrounding assessment.
+export type AlertingContext = Pick<AssessmentContext, 'tx' | 'ids' | 'clock' | 'monitor'>;
+
 // A hash can differ with no classifiable change (for example a schema rewritten into an equivalent form);
 // that still deserves an alert, at the lowest severity.
 const UNCLASSIFIED_DRIFT_SEVERITY = 'warning';
@@ -73,13 +76,13 @@ async function escalateAndAlert(context: AssessmentContext, drift: Drift): Promi
   await alert(context, { incident, type: 'incident.escalated', drift });
 }
 
-async function resolveAndAlert(context: AssessmentContext, open: Incident, resolution: Resolution): Promise<void> {
+export async function resolveAndAlert(context: AlertingContext, open: Incident, resolution: Resolution): Promise<void> {
   const incident = resolveIncident(open, resolution, context.clock.now());
   await context.tx.incidents.save(incident);
   await alert(context, { incident, type: 'incident.resolved', drift: null });
 }
 
-function alert(context: AssessmentContext, subject: Omit<AlertSubject, 'monitor'>): Promise<void> {
+function alert(context: AlertingContext, subject: Omit<AlertSubject, 'monitor'>): Promise<void> {
   return recordAlerts(context.tx, { monitor: context.monitor, ...subject }, context);
 }
 

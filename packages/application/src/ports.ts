@@ -83,6 +83,7 @@ export interface OutboxMessage {
 
 export interface Outbox {
   enqueue(messages: OutboxMessage[]): Promise<void>;
+  // Only unsent messages of active endpoints are due; a disabled endpoint's messages wait until it is re-enabled.
   claimDue(now: Date, leaseUntil: Date, limit: number): Promise<OutboxMessage[]>;
   markSent(id: string, now: Date): Promise<void>;
   markFailed(id: string, attempts: number, nextAttemptAt: Date): Promise<void>;

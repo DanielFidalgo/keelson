@@ -189,6 +189,9 @@ export class InMemoryWebhookEndpoints implements WebhookEndpointRepository {
 export class InMemoryOutbox implements Outbox {
   private readonly records = new Map<string, OutboxMessage>();
 
+  // Messages are claimable only while their endpoint is active, which the real adapter expresses as a join.
+  constructor(private readonly endpoints: InMemoryWebhookEndpoints) {}
+
   messages(): OutboxMessage[] {
     return [...this.records.values()];
   }
@@ -202,6 +205,7 @@ export class InMemoryOutbox implements Outbox {
   claimDue(now: Date, leaseUntil: Date, limit: number): Promise<OutboxMessage[]> {
     const due = this.messages()
       .filter((message) => message.sentAt === null && message.nextAttemptAt <= now)
+      .filter((message) => this.endpoints.records.get(message.endpointId)?.status === 'active')
       .slice(0, limit);
     const claimed = due.map((message) => ({ ...message, nextAttemptAt: leaseUntil }));
     for (const message of claimed) this.records.set(message.id, message);

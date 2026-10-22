@@ -5,6 +5,7 @@ import {
   newWebhookEndpoint,
   recordDeliveryFailure,
   recordDeliverySuccess,
+  updateWebhookEndpoint,
   type WebhookEndpoint,
 } from './webhook-endpoint.js';
 import { problemsOf } from './test-support.js';
@@ -83,5 +84,35 @@ describe('nextDeliveryAttemptAt', () => {
 
   it('rejects zero attempts', () => {
     expect(problemsOf(() => nextDeliveryAttemptAt(0, now))).toEqual(['attempts must be a positive integer']);
+  });
+});
+
+describe('updateWebhookEndpoint', () => {
+  it('changes the url and leaves the original untouched', () => {
+    const original = newWebhookEndpoint(standard, now);
+    const updated = updateWebhookEndpoint(original, { url: 'https://hooks.example.com/other' });
+    expect(updated.url).toBe('https://hooks.example.com/other');
+    expect(original.url).toBe(standard.url);
+  });
+
+  it('rejects a url that is not absolute http or https', () => {
+    const create = () => updateWebhookEndpoint(newWebhookEndpoint(standard, now), { url: 'ftp://x' });
+    expect(problemsOf(create)).toHaveLength(1);
+  });
+
+  it('re-enabling a disabled endpoint resets its failure count', () => {
+    const disabled = failTimes(newWebhookEndpoint(standard, now), MAX_CONSECUTIVE_DELIVERY_FAILURES);
+    const reEnabled = updateWebhookEndpoint(disabled, { status: 'active' });
+    expect(reEnabled).toMatchObject({ status: 'active', consecutiveFailures: 0 });
+  });
+
+  it('keeps the failure count when the endpoint stays active', () => {
+    const failing = failTimes(newWebhookEndpoint(standard, now), 3);
+    expect(updateWebhookEndpoint(failing, { status: 'active' }).consecutiveFailures).toBe(3);
+  });
+
+  it('disabling keeps the failure count', () => {
+    const failing = failTimes(newWebhookEndpoint(standard, now), 3);
+    expect(updateWebhookEndpoint(failing, { status: 'disabled' })).toMatchObject({ status: 'disabled', consecutiveFailures: 3 });
   });
 });
