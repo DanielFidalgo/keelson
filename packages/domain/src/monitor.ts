@@ -1,10 +1,9 @@
 import { DomainValidationError } from './errors.js';
 import { slotAt, slotStart } from './slot.js';
 import type { SnapshotHash } from './snapshot.js';
+import { requiredTextProblems, urlProblems } from './validation.js';
 
 export const MIN_PROBE_INTERVAL_SECONDS = 300;
-
-const ALLOWED_URL_PROTOCOLS: readonly string[] = ['http:', 'https:'];
 
 export type MonitorStatus = 'active' | 'paused';
 
@@ -67,25 +66,12 @@ export function advanceSchedule(monitor: Monitor, now: Date): { monitor: Monitor
 
 function assertValid(fields: ValidatedFields): void {
   const problems = [
-    ...requiredTextProblems(fields),
+    ...requiredTextProblems({ id: fields.id, tenantId: fields.tenantId, name: fields.name }),
     ...urlProblems(fields.url),
     ...intervalProblems(fields.intervalSeconds),
     ...authSecretRefProblems(fields.authSecretRef),
   ];
   if (problems.length > 0) throw new DomainValidationError(problems);
-}
-
-function requiredTextProblems(fields: ValidatedFields): string[] {
-  const requiredTexts = { id: fields.id, tenantId: fields.tenantId, name: fields.name };
-  return Object.entries(requiredTexts)
-    .filter(([, value]) => value.trim() === '')
-    .map(([field]) => `${field} must not be empty`);
-}
-
-function urlProblems(url: string): string[] {
-  const protocol = URL.canParse(url) ? new URL(url).protocol : null;
-  if (protocol !== null && ALLOWED_URL_PROTOCOLS.includes(protocol)) return [];
-  return ['url must be an absolute http or https URL'];
 }
 
 function intervalProblems(intervalSeconds: number): string[] {

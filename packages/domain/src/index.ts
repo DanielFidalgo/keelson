@@ -7,3 +7,7 @@ export * from './probe.js';
 export * from './monitor.js';
 export * from './schema-change.js';
 export * from './drift.js';
+export * from './incident.js';
+export * from './health.js';
+export * from './alert.js';
+export * from './webhook-endpoint.js';
