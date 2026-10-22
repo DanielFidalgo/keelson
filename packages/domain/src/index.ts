@@ -5,3 +5,5 @@ export * from './snapshot.js';
 export * from './slot.js';
 export * from './probe.js';
 export * from './monitor.js';
+export * from './schema-change.js';
+export * from './drift.js';

@@ -9,7 +9,7 @@ export interface RawCatalog {
 
 export type CanonicalTool = { name: string; description: string; inputSchema: JsonSchema };
 export type CanonicalPrompt = { name: string; description: string };
-export type CanonicalResource = { uri: string; name: string };
+export type CanonicalResource = { uri: string };
 export type CanonicalCatalog = {
   tools: CanonicalTool[];
   prompts: CanonicalPrompt[];
@@ -42,10 +42,7 @@ function toCanonicalPrompt(entry: RawEntry): CanonicalPrompt {
 }
 
 function toCanonicalResource(entry: RawEntry): CanonicalResource {
-  return {
-    uri: requireString(entry, 'uri', 'resource'),
-    name: optionalText(entry, 'name', 'resource'),
-  };
+  return { uri: requireString(entry, 'uri', 'resource') };
 }
 
 function canonicaliseList<T>(
@@ -106,26 +103,28 @@ function toJsonValue(value: unknown, path: string): JsonValue {
   throw new CatalogError(`${path} must be JSON`);
 }
 
-// Only `required` and primitive-only `enum` are sets; every other array is positional and keeps its order.
+// Only `required` and `enum` are sets; every other array is positional and keeps its order.
 function sortSetLikeArrays(value: JsonValue, parentKey?: string): JsonValue {
   if (Array.isArray(value)) {
     const items = value.map((item) => sortSetLikeArrays(item));
-    return isSetLike(parentKey, items) ? items.sort(compareSerialised) : items;
+    if (parentKey === 'enum') return deduplicate(items).sort(compareSerialised);
+    return parentKey === 'required' ? items.sort(compareSerialised) : items;
   }
   if (!isJsonObject(value)) return value;
   const entries = Object.entries(value).map(([key, child]) => [key, sortSetLikeArrays(child, key)] as const);
   return Object.fromEntries(entries);
 }
 
-function isSetLike(parentKey: string | undefined, items: JsonValue[]): boolean {
-  if (parentKey === 'required') return true;
-  return parentKey === 'enum' && items.every(isPrimitive);
+function deduplicate(items: JsonValue[]): JsonValue[] {
+  const uniqueBySerialisation = new Map(items.map((item) => [serialise(item), item]));
+  return [...uniqueBySerialisation.values()];
 }
 
-function isPrimitive(value: JsonValue): boolean {
-  return typeof value !== 'object' || value === null;
+// Keys are sorted first so object members that differ only in key order compare equal.
+function serialise(value: JsonValue): string {
+  return JSON.stringify(sortKeysRecursively(value));
 }
 
 function compareSerialised(left: JsonValue, right: JsonValue): number {
-  return compareCodeUnits(JSON.stringify(left), JSON.stringify(right));
+  return compareCodeUnits(serialise(left), serialise(right));
 }

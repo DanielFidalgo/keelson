@@ -55,10 +55,21 @@ describe('canonicalise', () => {
     expect(schema?.['required']).toEqual(['limit', 'query']);
   });
 
-  it('keeps the order of an enum that holds objects', () => {
+  it('sorts an enum that holds objects by their canonical form', () => {
     const inputSchema = { enum: [{ b: 1 }, { a: 2 }] };
     const { tools } = canonicalise(withTool({ name: 'x', inputSchema }));
-    expect(tools[0]?.inputSchema['enum']).toEqual([{ b: 1 }, { a: 2 }]);
+    expect(tools[0]?.inputSchema['enum']).toEqual([{ a: 2 }, { b: 1 }]);
+  });
+
+  it('removes duplicate enum members, including objects that differ only in key order', () => {
+    const inputSchema = { enum: ['a', 'a', 'b', { x: 1, y: 2 }, { y: 2, x: 1 }] };
+    const { tools } = canonicalise(withTool({ name: 'x', inputSchema }));
+    expect(tools[0]?.inputSchema['enum']).toEqual(['a', 'b', { x: 1, y: 2 }]);
+  });
+
+  it('drops the resource name, since a resource is identified by its uri', () => {
+    const { resources } = canonicalise({ tools: [], prompts: [], resources: [{ uri: 'file:///a', name: 'a' }] });
+    expect(resources).toEqual([{ uri: 'file:///a' }]);
   });
 
   it('keeps the order of arrays that are not sets', () => {
