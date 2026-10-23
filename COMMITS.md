@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(infrastructure): add Postgres repositories, outbox and migrations
+## pending: feat(infrastructure): add SSRF-guarded MCP inspector, webhook channels and demo server
+
+Adds the code that touches untrusted URLs: a guarded `fetch` that connects only to addresses that passed the policy check, so DNS rebinding and redirects cannot reach internal hosts, the MCP inspector built on the v2 SDK client with a 10 s probe budget and a 50 page cap, the Standard Webhooks and Slack alert channels, and a demo MCP server (with an inspector contract test against it) whose tool description can be changed on cue for the rug-pull demo. All of it is exported only from `@keelson/infrastructure/egress`, and the dependency rule now bars `apps/api` from that entry, with a script that proves the rule fires. Webhook deliveries never follow redirects: a 3xx is a failed delivery, since following one would replay the signed POST as a bodyless GET.
+
+## b6aee8c: feat(infrastructure): add Postgres repositories, outbox and migrations
 
 Adds the Postgres adapters for every persistence port, each unit of work running in one transaction, and the first migration as a node-pg-migrate SQL file. Dispatch and outbox claims use `FOR UPDATE SKIP LOCKED`, so concurrent workers never take the same row. There is no foreign key from probes to snapshots, so the probe row can be written before its snapshot in the same transaction.
 

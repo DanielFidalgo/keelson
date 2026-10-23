@@ -31,6 +31,7 @@ module.exports = {
         path: [
           '^packages/infrastructure/src/network',
           '^packages/infrastructure/src/inspector/sdk-mcp-inspector\\.ts$',
+          '^packages/infrastructure/src/egress\\.ts$',
         ],
       },
     },
