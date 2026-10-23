@@ -2,7 +2,15 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(worker): serve probe, inspect and outbox drain endpoints
+## pending: docs(plan): list the api and secret store environment variables
+
+Adds `API_URL` (the api's own URL, default audience for `/internal/dispatch`), `SECRET_STORE` and `SECRETS_DIR` to the plan's environment variables, so the Pulumi task deploys with the names the services read.
+
+## pending: feat(api): serve the OpenAPI-first v1 API, dispatch and admin commands
+
+Adds `apps/api`, the public Cloud Run service. `openapi.yaml` (3.1) is the source of truth: fastify-openapi-glue binds the routes, validates requests strictly (unknown fields are refused, not passed on) and serializes only the fields of each response schema, so secret references cannot leak. It also adds API-key auth, problem+json errors, the Scalar reference at `/reference`, `POST /internal/dispatch` for Cloud Scheduler, and the `migrate` and `create-tenant` commands. The environment parsing and adapter factories the api shares with the worker moved to `@keelson/infrastructure`, and the domain gained `parseSnapshotHash` so a hash from a request is validated, never cast.
+
+## 988ab96: feat(worker): serve probe, inspect and outbox drain endpoints
 
 Adds `apps/worker`, the Cloud Run service that Cloud Tasks and the api call: `POST /internal/probe` answers 204 or 500 so a failed probe is retried (the last retry logs `probe.retries_exhausted`), `/internal/inspect` returns an inspection without writing, and `/internal/outbox/drain` delivers due alerts. It is the first composition root, wiring adapters with awilix from a zod-parsed environment that fails fast with every problem listed. A dependency rule keeps awilix out of `packages/`, and `FileSecretStore` lets local runs share secrets between api and worker without Secret Manager.
 

@@ -5,6 +5,7 @@
     { "path": "packages/application" },
     { "path": "packages/infrastructure" },
     { "path": "apps/demo-server" },
-    { "path": "apps/worker" }
+    { "path": "apps/worker" },
+    { "path": "apps/api" }
   ]
 }

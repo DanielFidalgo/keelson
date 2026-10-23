@@ -1,0 +1,758 @@
+openapi: 3.1.0
+info:
+  title: Keelson API
+  version: 1.0.0
+  description: |
+    Keelson watches remote MCP servers. It lists their tools, prompts and resources on a schedule, keeps a
+    baseline you approved, and alerts you when the catalog drifts or the server goes down.
+
+    Every request needs an API key in an `Authorization: Bearer <key>` header. Errors are returned as
+    `application/problem+json`. List endpoints take `?cursor=&limit=` and return `{ items, nextCursor }`;
+    pass `nextCursor` back as `cursor` to read the next page.
+tags:
+  - name: Monitors
+  - name: Incidents
+  - name: Webhook endpoints
+security:
+  - bearerAuth: []
+paths:
+  /v1/monitors:
+    post:
+      operationId: createMonitor
+      tags: [Monitors]
+      summary: Register a monitor
+      description: |
+        Keelson contacts the URL once to confirm it is an MCP server. Nothing is stored when it is not.
+        An `authSecret` is kept in the secret store and never returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMonitorRequest'
+      responses:
+        '201':
+          description: The monitor was registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: listMonitors
+      tags: [Monitors]
+      summary: List your monitors, newest first
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of monitors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/monitors/{monitorId}:
+    parameters:
+      - $ref: '#/components/parameters/MonitorId'
+    get:
+      operationId: getMonitor
+      tags: [Monitors]
+      summary: Get a monitor
+      responses:
+        '200':
+          description: The monitor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateMonitor
+      tags: [Monitors]
+      summary: Change a monitor
+      description: Only the fields you send are changed. Sending a null `authSecret` removes the stored token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMonitorRequest'
+      responses:
+        '200':
+          description: The updated monitor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteMonitor
+      tags: [Monitors]
+      summary: Delete a monitor and everything recorded for it
+      responses:
+        '204':
+          description: The monitor was deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/monitors/{monitorId}/probes:
+    parameters:
+      - $ref: '#/components/parameters/MonitorId'
+    get:
+      operationId: listProbes
+      tags: [Monitors]
+      summary: List the probes run against a monitor, newest first
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of probes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/monitors/{monitorId}/snapshots/{hash}:
+    parameters:
+      - $ref: '#/components/parameters/MonitorId'
+      - name: hash
+        in: path
+        required: true
+        description: A snapshot hash taken from a probe, 64 lowercase hex characters.
+        schema:
+          type: string
+    get:
+      operationId: getSnapshot
+      tags: [Monitors]
+      summary: Get the catalog a monitor served when the snapshot was taken
+      responses:
+        '200':
+          description: The snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/monitors/{monitorId}/drift:
+    parameters:
+      - $ref: '#/components/parameters/MonitorId'
+    get:
+      operationId: getDrift
+      tags: [Monitors]
+      summary: Compare the approved baseline with the latest catalog
+      description: '`drift` is null while the latest catalog matches the baseline, or before there is one.'
+      responses:
+        '200':
+          description: The current drift, if any.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentDrift'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/monitors/{monitorId}/baseline:
+    parameters:
+      - $ref: '#/components/parameters/MonitorId'
+    post:
+      operationId: approveBaseline
+      tags: [Monitors]
+      summary: Accept a snapshot as the new baseline
+      description: Only a snapshot this monitor has served can be approved. Approving resolves an open drift incident.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveBaselineRequest'
+      responses:
+        '200':
+          description: The monitor with its new baseline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/incidents:
+    get:
+      operationId: listIncidents
+      tags: [Incidents]
+      summary: List incidents on your monitors, newest first
+      parameters:
+        - name: state
+          in: query
+          required: false
+          description: Only incidents in this state.
+          schema:
+            type: string
+            enum: [open, resolved]
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of incidents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/incidents/{incidentId}/acknowledge:
+    parameters:
+      - name: incidentId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: acknowledgeIncident
+      tags: [Incidents]
+      summary: Mark an open incident as seen
+      responses:
+        '200':
+          description: The acknowledged incident.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/webhook-endpoints:
+    post:
+      operationId: createWebhookEndpoint
+      tags: [Webhook endpoints]
+      summary: Register a webhook endpoint
+      description: |
+        The `standard` format signs each delivery following the Standard Webhooks specification.
+        The signing secret is in this response and nowhere else: store it now.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookEndpointRequest'
+      responses:
+        '201':
+          description: The endpoint was registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedWebhookEndpoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: listWebhookEndpoints
+      tags: [Webhook endpoints]
+      summary: List your webhook endpoints, newest first
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of webhook endpoints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEndpointPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/webhook-endpoints/{endpointId}:
+    parameters:
+      - $ref: '#/components/parameters/EndpointId'
+    get:
+      operationId: getWebhookEndpoint
+      tags: [Webhook endpoints]
+      summary: Get a webhook endpoint
+      responses:
+        '200':
+          description: The endpoint. The signing secret is not included.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEndpoint'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateWebhookEndpoint
+      tags: [Webhook endpoints]
+      summary: Change a webhook endpoint
+      description: Re-enabling a disabled endpoint resets its failure count.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookEndpointRequest'
+      responses:
+        '200':
+          description: The updated endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEndpoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteWebhookEndpoint
+      tags: [Webhook endpoints]
+      summary: Delete a webhook endpoint
+      responses:
+        '204':
+          description: The endpoint was deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Keelson API key
+  parameters:
+    MonitorId:
+      name: monitorId
+      in: path
+      required: true
+      schema:
+        type: string
+    EndpointId:
+      name: endpointId
+      in: path
+      required: true
+      schema:
+        type: string
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: The `nextCursor` of the previous page.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: How many items to return at most. Defaults to 50.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+  responses:
+    BadRequest:
+      description: The request was rejected. `errors` lists every problem found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: The API key is missing or not valid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: There is no such resource, or it belongs to another account.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+    Monitor:
+      type: object
+      required:
+        - id
+        - name
+        - url
+        - transport
+        - intervalSeconds
+        - status
+        - hasAuthSecret
+        - baselineHash
+        - consecutiveFailures
+        - nextProbeAt
+        - createdAt
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+        transport:
+          type: string
+          enum: [streamable_http]
+        intervalSeconds:
+          type: integer
+        status:
+          type: string
+          enum: [active, paused]
+        hasAuthSecret:
+          type: boolean
+          description: Whether a bearer token is stored for this monitor. The token itself is never returned.
+        baselineHash:
+          type: [string, 'null']
+          description: The snapshot you approved, or null until the first probe sets one.
+        consecutiveFailures:
+          type: integer
+        nextProbeAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    MonitorPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Monitor'
+        nextCursor:
+          type: [string, 'null']
+    CreateMonitorRequest:
+      type: object
+      additionalProperties: false
+      required: [name, url, intervalSeconds]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          description: The MCP server's streamable HTTP endpoint.
+        intervalSeconds:
+          type: integer
+          description: Seconds between probes. The server states the smallest allowed value when it rejects one.
+        authSecret:
+          type: [string, 'null']
+          description: A bearer token Keelson presents to the MCP server.
+    UpdateMonitorRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        intervalSeconds:
+          type: integer
+        status:
+          type: string
+          enum: [active, paused]
+        authSecret:
+          type: [string, 'null']
+    Probe:
+      type: object
+      required:
+        - id
+        - slot
+        - startedAt
+        - latencyMs
+        - outcome
+        - errorDetail
+        - serverName
+        - serverVersion
+        - snapshotHash
+      properties:
+        id:
+          type: string
+        slot:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        latencyMs:
+          type: integer
+        outcome:
+          type: string
+          enum: [up, timeout, connection_error, protocol_error, auth_error]
+        errorDetail:
+          type: [string, 'null']
+        serverName:
+          type: [string, 'null']
+        serverVersion:
+          type: [string, 'null']
+        snapshotHash:
+          type: [string, 'null']
+    ProbePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Probe'
+        nextCursor:
+          type: [string, 'null']
+    Snapshot:
+      type: object
+      required: [hash, catalog]
+      properties:
+        hash:
+          type: string
+        catalog:
+          type: object
+          required: [tools, prompts, resources]
+          properties:
+            tools:
+              type: array
+              items:
+                type: object
+                required: [name, description, inputSchema]
+                properties:
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  inputSchema:
+                    type: object
+                    additionalProperties: true
+            prompts:
+              type: array
+              items:
+                type: object
+                required: [name, description]
+                properties:
+                  name:
+                    type: string
+                  description:
+                    type: string
+            resources:
+              type: array
+              items:
+                type: object
+                required: [uri]
+                properties:
+                  uri:
+                    type: string
+    Change:
+      type: object
+      description: |
+        One difference between baseline and current catalog. `kind` says which of the other fields are present:
+        `name` for tools and prompts, `uri` for resources, `tool` and `classification` for input schema changes,
+        and `target`, `name`, `before` and `after` for description changes.
+      required: [kind, severity]
+      properties:
+        kind:
+          type: string
+          enum:
+            - tool_added
+            - tool_removed
+            - prompt_added
+            - prompt_removed
+            - resource_added
+            - resource_removed
+            - input_schema_changed
+            - description_changed
+        severity:
+          type: string
+          enum: [critical, warning]
+        name:
+          type: string
+        uri:
+          type: string
+        tool:
+          type: string
+        classification:
+          type: string
+          enum: [breaking, compatible]
+        target:
+          type: string
+          enum: [tool, prompt]
+        before:
+          type: string
+        after:
+          type: string
+    CurrentDrift:
+      type: object
+      required: [drift]
+      properties:
+        drift:
+          type: [object, 'null']
+          required: [fromHash, toHash, changes]
+          properties:
+            fromHash:
+              type: string
+            toHash:
+              type: string
+            changes:
+              type: array
+              items:
+                $ref: '#/components/schemas/Change'
+    ApproveBaselineRequest:
+      type: object
+      additionalProperties: false
+      required: [snapshotHash]
+      properties:
+        snapshotHash:
+          type: string
+          description: 64 lowercase hex characters, taken from a probe of this monitor.
+    Incident:
+      type: object
+      required:
+        - id
+        - monitorId
+        - kind
+        - state
+        - openedAt
+        - resolvedAt
+        - resolution
+        - acknowledgedAt
+        - lastDriftId
+      properties:
+        id:
+          type: string
+        monitorId:
+          type: string
+        kind:
+          type: string
+          enum: [down, drift]
+        state:
+          type: string
+          enum: [open, resolved]
+        openedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: [string, 'null']
+          format: date-time
+        resolution:
+          type: [string, 'null']
+          enum: [recovered, approved, reverted, null]
+        acknowledgedAt:
+          type: [string, 'null']
+          format: date-time
+        lastDriftId:
+          type: [string, 'null']
+    IncidentPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        nextCursor:
+          type: [string, 'null']
+    WebhookEndpoint:
+      type: object
+      required: [id, url, format, status, consecutiveFailures, createdAt]
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        format:
+          type: string
+          enum: [standard, slack]
+        status:
+          type: string
+          enum: [active, disabled]
+        consecutiveFailures:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    CreatedWebhookEndpoint:
+      allOf:
+        - $ref: '#/components/schemas/WebhookEndpoint'
+        - type: object
+          required: [signingSecret]
+          properties:
+            signingSecret:
+              type: [string, 'null']
+              description: Shown once. Null for the `slack` format, which is not signed.
+    WebhookEndpointPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEndpoint'
+        nextCursor:
+          type: [string, 'null']
+    CreateWebhookEndpointRequest:
+      type: object
+      additionalProperties: false
+      required: [url, format]
+      properties:
+        url:
+          type: string
+        format:
+          type: string
+          enum: [standard, slack]
+    UpdateWebhookEndpointRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+        status:
+          type: string
+          enum: [active, disabled]

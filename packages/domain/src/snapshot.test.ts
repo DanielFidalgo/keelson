@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, createSnapshot } from './snapshot.js';
+import { DomainValidationError } from './errors.js';
+import { canonicalJson, createSnapshot, parseSnapshotHash } from './snapshot.js';
 import { reorderKeys, toolA, toolB, withTool, withTools } from './test-support.js';
 
 describe('createSnapshot', () => {
@@ -41,5 +42,27 @@ describe('createSnapshot', () => {
 describe('canonicalJson', () => {
   it('serialises without whitespace and with sorted keys', () => {
     expect(canonicalJson({ b: [1, { d: null, c: true }], a: 'x' })).toBe('{"a":"x","b":[1,{"c":true,"d":null}]}');
+  });
+});
+
+describe('parseSnapshotHash', () => {
+  it('accepts the hash a snapshot produces', () => {
+    const { hash } = createSnapshot(withTool(toolA));
+    expect(parseSnapshotHash(hash)).toBe(hash);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['uppercase hex', 'A'.repeat(64)],
+    ['a value that is too short', 'a'.repeat(63)],
+    ['a value that is too long', 'a'.repeat(65)],
+    ['non-hex characters', 'g'.repeat(64)],
+    ['a newline-terminated hash', `${'a'.repeat(64)}\n`],
+  ])('rejects %s', (_description, value) => {
+    expect(() => parseSnapshotHash(value)).toThrow(DomainValidationError);
+  });
+
+  it('names the problem so an API client can fix its request', () => {
+    expect(() => parseSnapshotHash('nope')).toThrow('snapshot hash must be 64 lowercase hex characters');
   });
 });
