@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(infrastructure): add SSRF-guarded MCP inspector, webhook channels and demo server
+## pending: feat(infrastructure): add Cloud Tasks, Secret Manager and internal auth adapters
+
+Adds the remaining infrastructure adapters: the Cloud Tasks probe queue, which names each task `probe-<monitorId>-<slot>` so a repeated fan-out is rejected by the queue itself (ALREADY_EXISTS counts as success), the Secret Manager store, and the system clock, UUID ids and random credential factory. Calls between `api` and `worker` are authenticated by a Google OIDC verifier and caller, with a static-token pair for local and e2e runs; the verifier answers `false` for any bad token and never throws. The `api` side reaches the worker through `WorkerInspectorClient` and the local `HttpProbeQueue`, which use plain `fetch` because the worker URL is Keelson's own, so both ship from the main entry and stay clear of the egress code.
+
+## ecc6e52: feat(infrastructure): add SSRF-guarded MCP inspector, webhook channels and demo server
 
 Adds the code that touches untrusted URLs: a guarded `fetch` that connects only to addresses that passed the policy check, so DNS rebinding and redirects cannot reach internal hosts, the MCP inspector built on the v2 SDK client with a 10 s probe budget and a 50 page cap, the Standard Webhooks and Slack alert channels, and a demo MCP server (with an inspector contract test against it) whose tool description can be changed on cue for the rug-pull demo. All of it is exported only from `@keelson/infrastructure/egress`, and the dependency rule now bars `apps/api` from that entry, with a script that proves the rule fires. Webhook deliveries never follow redirects: a 3xx is a failed delivery, since following one would replay the signed POST as a bodyless GET.
 
