@@ -2,7 +2,7 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: chore: ignore compiled infra output and local test reports
+## c36e2ed: chore: ignore compiled infra output and local test reports
 
 ESLint now skips `bin/`, where the Pulumi programs compile, so a local infra build no longer breaks `npm run lint`. Git ignores `.vitest/`, a report directory some local test wrappers write.
 

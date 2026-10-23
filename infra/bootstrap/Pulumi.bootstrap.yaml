@@ -4,3 +4,7 @@ config:
   # Still to fill in before the first apply (see the header of scripts/deploy.sh):
   #   pulumi config set repositoryId <numeric id of the GitHub repository> --cwd infra/bootstrap --stack bootstrap
   #   pulumi config set stateBucket <name of the Pulumi state bucket> --cwd infra/bootstrap --stack bootstrap
+
+  keelson-bootstrap:repositoryId: "1431639410"
+  keelson-bootstrap:stateBucket: fidalgo-tech-keelson-pulumi-state
+encryptionsalt: v1:aQeqA2kza2s=:v1:Ei/mnDLlEr+dZF96:IJobjZx5kgsEVZFw6JGwY2YjhqhSHg==
