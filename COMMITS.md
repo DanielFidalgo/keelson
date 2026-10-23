@@ -2,11 +2,15 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: docs(plan): drop process wording and rename the health route
+## pending: chore: ignore compiled infra output and local test reports
+
+ESLint now skips `bin/`, where the Pulumi programs compile, so a local infra build no longer breaks `npm run lint`. Git ignores `.vitest/`, a report directory some local test wrappers write.
+
+## d356e06: docs(plan): drop process wording and rename the health route
 
 Removes maintainer-process wording from the plan now that the repository is public, and updates the plan's health route to `/health`.
 
-## pending: fix: close final-review gaps before first deploy
+## f75e77e: fix: close final-review gaps before first deploy
 
 Pulumi now runs ahead-of-time compiled programs (`infra/bin`, built with `typescript` 6.0.3), because its bundled ts-node rejected the shared tsconfig, and the migrate and create-tenant jobs carry their script in `commands` so `--args=--name=x` reaches it. A failed webhook delivery now keeps its reason (`outbox.last_error`, migration 0002) and the worker logs one `webhook.delivery_failed` event per failure; `/healthz` became `/health` because Cloud Run reserves paths ending in `z`.
 

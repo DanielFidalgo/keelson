@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 import vueParser from 'vue-eslint-parser';
 
 export default defineConfig(
-  globalIgnores(['**/dist/', '**/coverage/', '**/node_modules/']),
+  globalIgnores(['**/dist/', '**/bin/', '**/coverage/', '**/node_modules/']),
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   pluginVue.configs['flat/essential'],
