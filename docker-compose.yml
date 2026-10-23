@@ -1,0 +1,121 @@
+# Local stack: docker compose up --build
+# Everything here is for a laptop. The defaults below are public on purpose and must never be reused anywhere real.
+
+x-database-environment: &database-environment
+  DATABASE_URL: postgres://keelson:keelson@postgres:5432/keelson
+
+# Static tokens replace Google ID tokens between the services, because nothing here runs on Google Cloud.
+x-internal-auth-environment: &internal-auth-environment
+  INTERNAL_AUTH_MODE: static
+  INTERNAL_STATIC_TOKEN: ${KEELSON_INTERNAL_TOKEN:-local-dev-token}
+
+# Secret Manager does not exist locally; the api and worker share files in one volume instead.
+x-secret-store-environment: &secret-store-environment
+  SECRET_STORE: file
+  SECRETS_DIR: /var/keelson/secrets
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: keelson
+      POSTGRES_PASSWORD: keelson
+      POSTGRES_DB: keelson
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keelson -d keelson"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The images run as the unprivileged node user, but a new named volume is owned by root.
+  secrets-permissions:
+    image: busybox:stable
+    command: ["chown", "1000:1000", "/var/keelson/secrets"]
+    volumes:
+      - secrets:/var/keelson/secrets
+
+  migrate:
+    build:
+      context: .
+      args:
+        APP: api
+    command: ["node", "apps/api/dist/commands/migrate.js"]
+    environment:
+      <<: *database-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      args:
+        APP: api
+    ports:
+      - "8080:8080"
+    environment:
+      <<: [*database-environment, *internal-auth-environment, *secret-store-environment]
+      WORKER_URL: http://worker:8080
+    volumes:
+      - secrets:/var/keelson/secrets
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      secrets-permissions:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      args:
+        APP: worker
+    ports:
+      - "8081:8080"
+    environment:
+      <<: [*database-environment, *internal-auth-environment, *secret-store-environment]
+      # Local only: the demo server lives on the compose network, which is private and plain HTTP.
+      # The deployed worker keeps both false so a monitor URL can never point at internal addresses.
+      ALLOW_PRIVATE_TARGETS: "true"
+      ALLOW_HTTP_TARGETS: "true"
+    volumes:
+      - secrets:/var/keelson/secrets
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      secrets-permissions:
+        condition: service_completed_successfully
+
+  demo-server:
+    build:
+      context: .
+      args:
+        APP: demo-server
+    ports:
+      - "3001:3001"
+    environment:
+      DEMO_ADMIN_TOKEN: ${DEMO_ADMIN_TOKEN:-local-demo-admin-token}
+
+  # Stands in for Cloud Scheduler: dispatch due probes on the api and drain the outbox on the worker every minute.
+  scheduler:
+    image: curlimages/curl:8.11.1
+    entrypoint: ["/bin/sh", "-c"]
+    # A failed call is only printed, so the loop survives the api or worker restarting.
+    command:
+      - |
+        while true; do
+          curl -fsS -X POST -H "Authorization: Bearer $$INTERNAL_STATIC_TOKEN" http://api:8080/internal/dispatch || true
+          curl -fsS -X POST -H "Authorization: Bearer $$INTERNAL_STATIC_TOKEN" http://worker:8080/internal/outbox/drain || true
+          sleep 60
+        done
+    environment:
+      <<: *internal-auth-environment
+    depends_on:
+      - api
+      - worker
+
+volumes:
+  postgres-data:
+  secrets:

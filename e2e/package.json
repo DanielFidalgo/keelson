@@ -1,0 +1,20 @@
+{
+  "name": "@keelson/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@keelson/api": "*",
+    "@keelson/application": "*",
+    "@keelson/demo-server": "*",
+    "@keelson/infrastructure": "*",
+    "@keelson/worker": "*",
+    "@testcontainers/postgresql": "^12.2.1",
+    "@types/pg": "^8.23.1",
+    "awilix": "^13.0.5",
+    "fastify": "^5.12.7",
+    "pg": "^8.23.1",
+    "standardwebhooks": "^1.1.1",
+    "zod": "^4.6.7"
+  }
+}

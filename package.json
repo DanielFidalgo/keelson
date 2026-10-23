@@ -15,7 +15,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "deps:check": "depcruise packages $(test -d apps && echo apps)",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "tsx scripts/seed-public-monitors.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -23,6 +24,7 @@
     "dependency-cruiser": "^18.7.0",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
+    "tsx": "^4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.72.0",
     "vitest": "^5.0.5"

@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: build(infra): deploy Keelson to Cloud Run with Pulumi
+## pending: test(e2e): prove the rug-pull path end to end and document local runs
+
+Adds the `@keelson/e2e` workspace, which starts Postgres with Testcontainers and runs the api, worker and demo server in one process on ephemeral ports with one controllable clock, then proves the headline path: a tool description rewritten on the demo server yields exactly one critical `drift` incident and one delivery whose Standard Webhooks signature verifies, and a repeated dispatch and drain delivers nothing more. The api and worker now export their builders from `package.json` so the test can use them. `HttpProbeQueue` now accepts a job and returns, as Cloud Tasks does, and reports a failed delivery to an `onDeliveryError` callback: it used to wait for the worker's probe, which locks the monitor row the dispatch still holds, so every local dispatch deadlocked until its timeout. The e2e polls the API for each probe. Also adds `docker-compose.yml` with a curl scheduler, `npm run seed` to register the five public servers without duplicates, and the README.
+
+## b92e2c4: build(infra): deploy Keelson to Cloud Run with Pulumi
 
 Adds one multi-stage Dockerfile that builds the api, worker and demo-server images, and two Pulumi programs under `infra/` (outside the root workspaces, with their own lockfile, so Pulumi's OpenTelemetry versions never reach the apps). The main stack runs the services on Cloud Run with Cloud Tasks, Cloud Scheduler and a retries-exhausted alert; a separate bootstrap stack, applied once by a person, owns the service accounts, secrets, custom roles, the GitHub trust and every project-level binding, so the CI deployer holds no right to edit project IAM and cannot widen its own access. The api's and worker's secret access is limited by IAM conditions to monitor and webhook secrets. The deploy workflow runs only after CI passes on `main`, pull request previews run as a read-only account, and Pulumi mock tests pin the wiring against the apps' own config schemas.
 

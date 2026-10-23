@@ -37,7 +37,7 @@ import {
   type ManagedSecretStore,
 } from '@keelson/infrastructure';
 import { asClass, asFunction, asValue, createContainer, InjectionMode, type AwilixContainer } from 'awilix';
-import type { FastifyServerOptions } from 'fastify';
+import type { FastifyBaseLogger, FastifyServerOptions } from 'fastify';
 import type { ApiConfig } from './config.js';
 import { createProbeQueue, type ManagedProbeQueue } from './probe-queue.js';
 
@@ -45,6 +45,8 @@ import { createProbeQueue, type ManagedProbeQueue } from './probe-queue.js';
 export interface ApiCradle {
   config: ApiConfig;
   loggerOptions: NonNullable<FastifyServerOptions['logger']>;
+  // The server's own logger, registered by buildApiServer once it exists. Commands never build a server and never log through it.
+  logger: FastifyBaseLogger;
   databaseUrl: string;
   pool: ReturnType<typeof createPool>;
   clock: Clock;
@@ -101,8 +103,16 @@ export function createApiContainer(config: ApiConfig): AwilixContainer<ApiCradle
     inspector: asFunction(
       ({ internalCaller }: ApiCradle) => new WorkerInspectorClient({ workerUrl: config.workerUrl, caller: internalCaller }),
     ).singleton(),
-    probeQueue: asFunction(({ internalCaller }: ApiCradle) =>
-      createProbeQueue({ config: config.probeQueue, workerUrl: config.workerUrl, caller: internalCaller }),
+    probeQueue: asFunction((cradle: ApiCradle) =>
+      createProbeQueue({
+        config: config.probeQueue,
+        workerUrl: config.workerUrl,
+        caller: cradle.internalCaller,
+        // The queue is built at startup, before the server and its logger exist, so the logger is read when a failure happens.
+        onDeliveryError: (error, { monitorId, slot }) => {
+          cradle.logger.error({ event: 'probe.enqueue_failed', monitorId, slot, err: error }, 'probe job was not delivered');
+        },
+      }),
     )
       .singleton()
       .disposer(({ close }) => close()),

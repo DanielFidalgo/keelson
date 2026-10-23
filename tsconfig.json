@@ -1,11 +1,18 @@
 {
-  "files": [],
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "files": ["scripts/seed-public-monitors.ts"],
   "references": [
     { "path": "packages/domain" },
     { "path": "packages/application" },
     { "path": "packages/infrastructure" },
     { "path": "apps/demo-server" },
     { "path": "apps/worker" },
-    { "path": "apps/api" }
+    { "path": "apps/api" },
+    { "path": "e2e" }
   ]
 }

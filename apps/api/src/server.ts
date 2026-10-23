@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fastifyAwilixPlugin } from '@fastify/awilix';
 import scalarApiReference from '@scalar/fastify-api-reference';
 import { createCloudTraceLoggerFactory } from '@keelson/infrastructure';
-import type { AwilixContainer } from 'awilix';
+import { asValue, type AwilixContainer } from 'awilix';
 import Fastify, { type FastifyInstance } from 'fastify';
 import openApiGlue from 'fastify-openapi-glue';
 import { securityHandlers } from './auth.js';
@@ -31,6 +31,9 @@ export function buildApiServer(container: AwilixContainer<ApiCradle>): FastifyIn
     // reporting every violation tells the client all that is wrong with its request in one round trip.
     ajv: { customOptions: { removeAdditional: false, allErrors: true } },
   });
+
+  // Registered so adapters built before the server, such as the probe queue, can log through the one server logger.
+  container.register({ logger: asValue(server.log) });
 
   // The composition root owns the container and disposes it itself, after the server has stopped taking requests.
   void server.register(fastifyAwilixPlugin, { container, disposeOnClose: false });
