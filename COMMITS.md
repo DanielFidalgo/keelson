@@ -2,6 +2,14 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
+## pending: fix(infra): give the deploy's temporary stack config a yaml name
+
+Pulumi infers a config file's format from its extension, and `scripts/deploy.sh` copied the stack config to an extensionless `mktemp` file, so the first deploy stopped with "no marshaler found". The copy now keeps the name `Pulumi.dev.yaml` inside a temp directory. Also records the `dev` stack's encryptionsalt, which CI needs to open the stack.
+
+## a4177b9: chore(infra): record the applied bootstrap stack config
+
+Commits the bootstrap stack's settings after its first apply: the numeric GitHub repository id the CI trust is pinned to, the state bucket name, and the stack's encryptionsalt. No secret values: every secret lives in Secret Manager.
+
 ## c36e2ed: chore: ignore compiled infra output and local test reports
 
 ESLint now skips `bin/`, where the Pulumi programs compile, so a local infra build no longer breaks `npm run lint`. Git ignores `.vitest/`, a report directory some local test wrappers write.

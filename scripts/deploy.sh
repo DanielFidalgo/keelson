@@ -78,8 +78,10 @@ REGION="$(pulumi_in_stack config get gcp:region)"
 REGISTRY="${REGION}-docker.pkg.dev"
 
 # The image tag goes into a throwaway copy of the stack config, so a deploy never leaves a modified Pulumi.dev.yaml behind.
-stack_config="$(mktemp)"
-trap 'rm -f "$stack_config"' EXIT
+# Pulumi infers the file format from the extension, so the copy keeps the stack file's name inside a temp directory.
+stack_config_dir="$(mktemp -d)"
+trap 'rm -rf "$stack_config_dir"' EXIT
+stack_config="${stack_config_dir}/Pulumi.${STACK}.yaml"
 cp "${INFRA_DIRECTORY}/Pulumi.${STACK}.yaml" "$stack_config"
 pulumi_up() {
   pulumi_in_stack up --yes --config-file "$stack_config" --config "keelson:imageTag=${IMAGE_TAG}" "$@"

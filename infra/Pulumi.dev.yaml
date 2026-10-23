@@ -3,3 +3,4 @@ config:
   gcp:region: us-central1
   # Overridden per deploy with --config; this value is only what a bare `pulumi preview` sees.
   keelson:imageTag: latest
+encryptionsalt: v1:tYjJFN5vEPg=:v1:JWPRCEa6IwzlEovr:zM6jSjT+gFuLM9yNZh5Cg/ZG1sG+6g==
