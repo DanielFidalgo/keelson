@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(infrastructure): add Cloud Tasks, Secret Manager and internal auth adapters
+## pending: feat(worker): serve probe, inspect and outbox drain endpoints
+
+Adds `apps/worker`, the Cloud Run service that Cloud Tasks and the api call: `POST /internal/probe` answers 204 or 500 so a failed probe is retried (the last retry logs `probe.retries_exhausted`), `/internal/inspect` returns an inspection without writing, and `/internal/outbox/drain` delivers due alerts. It is the first composition root, wiring adapters with awilix from a zod-parsed environment that fails fast with every problem listed. A dependency rule keeps awilix out of `packages/`, and `FileSecretStore` lets local runs share secrets between api and worker without Secret Manager.
+
+## dcce76f: feat(infrastructure): add Cloud Tasks, Secret Manager and internal auth adapters
 
 Adds the remaining infrastructure adapters: the Cloud Tasks probe queue, which names each task `probe-<monitorId>-<slot>` so a repeated fan-out is rejected by the queue itself (ALREADY_EXISTS counts as success), the Secret Manager store, and the system clock, UUID ids and random credential factory. Calls between `api` and `worker` are authenticated by a Google OIDC verifier and caller, with a static-token pair for local and e2e runs; the verifier answers `false` for any bad token and never throws. The `api` side reaches the worker through `WorkerInspectorClient` and the local `HttpProbeQueue`, which use plain `fetch` because the worker URL is Keelson's own, so both ship from the main entry and stay clear of the egress code.
 

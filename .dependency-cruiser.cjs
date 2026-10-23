@@ -36,6 +36,13 @@ module.exports = {
       },
     },
     {
+      name: 'di-only-in-composition-roots',
+      comment: 'Dependency-injection containers are wired in the apps only; packages receive their dependencies as constructor arguments.',
+      severity: 'error',
+      from: { path: '^packages/' },
+      to: { path: '^node_modules/(awilix|@fastify/awilix)/' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       from: {},

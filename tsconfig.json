@@ -4,6 +4,7 @@
     { "path": "packages/domain" },
     { "path": "packages/application" },
     { "path": "packages/infrastructure" },
-    { "path": "apps/demo-server" }
+    { "path": "apps/demo-server" },
+    { "path": "apps/worker" }
   ]
 }

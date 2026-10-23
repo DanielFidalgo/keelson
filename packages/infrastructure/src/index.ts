@@ -19,6 +19,8 @@ export * from './postgres/tenant-repository.js';
 export * from './postgres/unit-of-work.js';
 export * from './postgres/webhook-endpoint-repository.js';
 export * from './system/credential-factory.js';
+export * from './system/file-secret-store.js';
 export * from './system/http-probe-queue.js';
+export * from './system/logging.js';
 export * from './system/system-clock.js';
 export * from './system/uuid-generator.js';

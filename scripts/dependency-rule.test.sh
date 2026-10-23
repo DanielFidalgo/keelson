@@ -54,3 +54,7 @@ expect_rule_violation domain-is-pure \
 expect_rule_violation api-no-untrusted-egress \
   "$repo_root/apps/api/src/__violation.ts" \
   "import '@keelson/infrastructure/egress';"
+
+expect_rule_violation di-only-in-composition-roots \
+  "$repo_root/packages/application/src/__violation.ts" \
+  "import 'awilix';"
