@@ -2,11 +2,15 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: docs(plan): use node-pg-migrate and awilix dependency injection
+## pending: feat(infrastructure): add Postgres repositories, outbox and migrations
+
+Adds the Postgres adapters for every persistence port, each unit of work running in one transaction, and the first migration as a node-pg-migrate SQL file. Dispatch and outbox claims use `FOR UPDATE SKIP LOCKED`, so concurrent workers never take the same row. There is no foreign key from probes to snapshots, so the probe row can be written before its snapshot in the same transaction.
+
+## 118baf2: docs(plan): use node-pg-migrate and awilix dependency injection
 
 Migrations move to node-pg-migrate with plain SQL files (`NNNN_<what>.sql`, a header comment saying why, idempotent DDL), replacing a hand-written runner. Dependency injection uses awilix in PROXY mode, wired only in each app's `container.ts`, so the domain and application layers stay library-free. Adds this commit log.
 
-## pending: feat(application): add monitor, baseline, webhook, outbox and tenant use cases
+## f3f859e: feat(application): add monitor, baseline, webhook, outbox and tenant use cases
 
 Completes the application layer: register, update and delete monitors (registration rejects anything that is not an MCP server and stores nothing), approve a baseline, acknowledge incidents, manage webhook endpoints, create tenants with hashed API keys, and drain the outbox with backoff and endpoint disabling after 10 failures. Read queries are tenant-scoped. The domain gains rescheduling on interval change and webhook endpoint updates.
 

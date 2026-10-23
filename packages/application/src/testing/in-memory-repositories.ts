@@ -8,6 +8,7 @@ import type {
   SnapshotHash,
   WebhookEndpoint,
 } from '@keelson/domain';
+import { compareCodeUnits } from '@keelson/domain';
 import { paginate } from '../pagination.js';
 import type {
   ApiKeyRepository,
@@ -86,10 +87,12 @@ export class InMemoryProbes implements ProbeRepository {
     return Promise.resolve(this.forMonitor(monitorId).some((probe) => probe.snapshotHash === hash));
   }
 
+  // Newest by start time, not by slot: slots of different intervals are not comparable, so after an
+  // interval change a higher slot can belong to an older probe.
   private forMonitor(monitorId: string): Probe[] {
     return [...this.records.values()]
       .filter((probe) => probe.monitorId === monitorId)
-      .sort((left, right) => right.slot - left.slot);
+      .sort((left, right) => newestFirst(left.startedAt, right.startedAt) || compareCodeUnits(right.id, left.id));
   }
 }
 
