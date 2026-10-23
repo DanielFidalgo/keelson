@@ -1,0 +1,6 @@
+name: keelson
+description: Keelson on Cloud Run, Cloud Tasks and Cloud Scheduler
+runtime:
+  name: nodejs
+  options:
+    typescript: true

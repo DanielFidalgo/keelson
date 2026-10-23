@@ -12,7 +12,8 @@ export default defineConfig({
       { extends: true, test: { name: 'packages', include: ['packages/*/src/**/*.test.ts'] } },
       { extends: true, test: { name: 'apps', include: ['apps/*/src/**/*.test.ts'] } },
       { extends: true, test: { name: 'e2e', include: ['e2e/**/*.test.ts'] } },
-      { extends: true, test: { name: 'infra', include: ['infra/**/*.test.ts'] } },
+      // infra has its own config: Pulumi's OpenTelemetry dependency breaks under the resolve conditions shared above.
+      'infra',
     ],
   },
 });

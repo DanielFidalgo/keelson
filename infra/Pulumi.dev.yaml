@@ -1,0 +1,5 @@
+config:
+  gcp:project: fidalgo-tech
+  gcp:region: us-central1
+  # Overridden per deploy with --config; this value is only what a bare `pulumi preview` sees.
+  keelson:imageTag: latest

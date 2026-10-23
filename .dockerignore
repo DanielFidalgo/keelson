@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+.git
+.superpowers
+**/*.local.md
+**/.env*
+# Deployment code is not part of any image, and its own dependencies are not installed here.
+infra

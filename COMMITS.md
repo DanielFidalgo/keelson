@@ -2,11 +2,15 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: docs(plan): list the api and secret store environment variables
+## pending: build(infra): deploy Keelson to Cloud Run with Pulumi
+
+Adds one multi-stage Dockerfile that builds the api, worker and demo-server images, and two Pulumi programs under `infra/` (outside the root workspaces, with their own lockfile, so Pulumi's OpenTelemetry versions never reach the apps). The main stack runs the services on Cloud Run with Cloud Tasks, Cloud Scheduler and a retries-exhausted alert; a separate bootstrap stack, applied once by a person, owns the service accounts, secrets, custom roles, the GitHub trust and every project-level binding, so the CI deployer holds no right to edit project IAM and cannot widen its own access. The api's and worker's secret access is limited by IAM conditions to monitor and webhook secrets. The deploy workflow runs only after CI passes on `main`, pull request previews run as a read-only account, and Pulumi mock tests pin the wiring against the apps' own config schemas.
+
+## 18df2dd: docs(plan): list the api and secret store environment variables
 
 Adds `API_URL` (the api's own URL, default audience for `/internal/dispatch`), `SECRET_STORE` and `SECRETS_DIR` to the plan's environment variables, so the Pulumi task deploys with the names the services read.
 
-## pending: feat(api): serve the OpenAPI-first v1 API, dispatch and admin commands
+## 4c423b0: feat(api): serve the OpenAPI-first v1 API, dispatch and admin commands
 
 Adds `apps/api`, the public Cloud Run service. `openapi.yaml` (3.1) is the source of truth: fastify-openapi-glue binds the routes, validates requests strictly (unknown fields are refused, not passed on) and serializes only the fields of each response schema, so secret references cannot leak. It also adds API-key auth, problem+json errors, the Scalar reference at `/reference`, `POST /internal/dispatch` for Cloud Scheduler, and the `migrate` and `create-tenant` commands. The environment parsing and adapter factories the api shares with the worker moved to `@keelson/infrastructure`, and the domain gained `parseSnapshotHash` so a hash from a request is validated, never cast.
 

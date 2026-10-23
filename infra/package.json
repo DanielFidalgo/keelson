@@ -1,0 +1,14 @@
+{
+  "name": "@keelson/infra",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.ts",
+  "dependencies": {
+    "@pulumi/gcp": "^10.2.0",
+    "@pulumi/pulumi": "^3.271.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -p . --noEmit",
+    "test": "vitest run"
+  }
+}

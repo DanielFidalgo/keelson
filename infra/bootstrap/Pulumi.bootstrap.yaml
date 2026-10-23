@@ -1,0 +1,6 @@
+config:
+  gcp:project: fidalgo-tech
+  gcp:region: us-central1
+  # Still to fill in before the first apply (see the header of scripts/deploy.sh):
+  #   pulumi config set repositoryId <numeric id of the GitHub repository> --cwd infra/bootstrap --stack bootstrap
+  #   pulumi config set stateBucket <name of the Pulumi state bucket> --cwd infra/bootstrap --stack bootstrap

@@ -17,8 +17,40 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # infra is not a workspace: its Pulumi dependencies would otherwise change the OpenTelemetry version the apps run on.
+      - run: npm ci --prefix infra
       - run: npm run typecheck
+      - run: npx tsc -p infra --noEmit
       - run: npm run lint
       - run: npm run deps:check
       - run: bash scripts/dependency-rule.test.sh
       - run: npm test
+
+  # Skipped until the workload identity exists (the variables are listed in the header of deploy.yml); fork pull
+  # requests are skipped too, because GitHub withholds the OIDC token and secrets from them. It runs as the
+  # read-only preview account: pull request code must never hold deploy rights.
+  preview:
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PULUMI_BACKEND_URL: gs://${{ vars.PULUMI_STATE_BUCKET }}
+      PULUMI_CONFIG_PASSPHRASE: ''
+      ALERT_NOTIFICATION_EMAIL: ${{ secrets.ALERT_NOTIFICATION_EMAIL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci --prefix infra
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_PREVIEW_SERVICE_ACCOUNT }}
+      - uses: pulumi/setup-pulumi@v2
+      - run: pulumi preview --cwd infra --stack dev --config "keelson:imageTag=${{ github.event.pull_request.head.sha }}"

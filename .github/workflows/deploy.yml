@@ -1,0 +1,77 @@
+# Repository variables (Settings > Secrets and variables > Actions > Variables):
+#   GCP_WORKLOAD_IDENTITY_PROVIDER  output workloadIdentityProvider of the bootstrap stack
+#   GCP_DEPLOYER_SERVICE_ACCOUNT    output deployerServiceAccount of the bootstrap stack
+#   GCP_PREVIEW_SERVICE_ACCOUNT     output previewServiceAccount of the bootstrap stack (used by the pull request preview in ci.yml)
+#   PULUMI_STATE_BUCKET             name of the GCS bucket holding the Pulumi state
+# Repository secret: ALERT_NOTIFICATION_EMAIL, the address that receives probe alerts.
+# The bootstrap stack and the first deploy run from a laptop (see scripts/deploy.sh); this workflow assumes both exist.
+name: Deploy
+
+# Runs after CI, never beside it, so only a commit whose checks passed is deployed. A workflow_run job always runs
+# from the default branch's workflow file, which is also what makes the token's ref claim refs/heads/main.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+# Two deploys racing on the same Pulumi state would corrupt it, and cancelling one midway would leave it half applied.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  PULUMI_BACKEND_URL: gs://${{ vars.PULUMI_STATE_BUCKET }}
+  # No stack config is secret, so the passphrase that would encrypt it can be empty.
+  PULUMI_CONFIG_PASSPHRASE: ''
+  ALERT_NOTIFICATION_EMAIL: ${{ secrets.ALERT_NOTIFICATION_EMAIL }}
+  STACK: dev
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      # The commit CI verified, not whatever main has moved on to since.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci --prefix infra
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: pulumi/setup-pulumi@v2
+
+      - name: Read project and region from the stack
+        run: |
+          echo "PROJECT=$(pulumi config get gcp:project --cwd infra --stack "$STACK")" >> "$GITHUB_ENV"
+          echo "REGION=$(pulumi config get gcp:region --cwd infra --stack "$STACK")" >> "$GITHUB_ENV"
+
+      - name: Build and push the images
+        run: |
+          registry="${REGION}-docker.pkg.dev"
+          gcloud auth configure-docker "$registry" --quiet
+          for app in api worker demo-server; do
+            image="${registry}/${PROJECT}/keelson/${app}:${IMAGE_TAG}"
+            docker build --build-arg APP="$app" --tag "$image" .
+            docker push "$image"
+          done
+
+      - name: Apply the infrastructure
+        run: pulumi up --yes --cwd infra --stack "$STACK" --config "keelson:imageTag=${IMAGE_TAG}"
+
+      - name: Migrate the database
+        run: gcloud run jobs execute keelson-migrate --project "$PROJECT" --region "$REGION" --wait

@@ -9,8 +9,7 @@
   "workspaces": [
     "packages/*",
     "apps/*",
-    "e2e",
-    "infra"
+    "e2e"
   ],
   "scripts": {
     "typecheck": "tsc -b",
