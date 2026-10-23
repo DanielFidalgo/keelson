@@ -43,7 +43,7 @@ export function buildApiServer(container: AwilixContainer<ApiCradle>): FastifyIn
   server.setErrorHandler(handleError);
   server.setNotFoundHandler(handleNotFound);
 
-  server.get('/healthz', () => ({ status: 'ok' }));
+  server.get('/health', () => ({ status: 'ok' }));
 
   const specification = readFileSync(SPECIFICATION_PATH, 'utf8');
   server.get(SPECIFICATION_URL_PATH, (_request, reply) => reply.type('application/yaml; charset=utf-8').send(specification));

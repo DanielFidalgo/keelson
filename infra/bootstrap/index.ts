@@ -15,7 +15,7 @@ const accounts = createServiceAccounts();
 const roles = createCustomRoles();
 createSecrets(accounts);
 grantApplicationSecretAccess(config, accounts, roles);
-grantDeployerAccess(config, accounts);
+grantDeployerAccess(config, accounts, roles);
 grantPreviewAccess(config, accounts);
 const ciIdentity = createCiIdentity(config, accounts);
 

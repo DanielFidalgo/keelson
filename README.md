@@ -24,7 +24,7 @@ flowchart LR
   Worker -->|signed webhook| Endpoints[Webhook endpoints]
 ```
 
-The api is the only public service. The worker is the only process that dials out to untrusted hosts, behind an SSRF-guarded fetch; the api reaches monitored servers only through the worker.
+The api and the demo server are the public services (the api authenticates its callers itself; the demo server serves a deliberately mutable tool). The worker accepts only requests that carry a Google-signed identity of the scheduler, Cloud Tasks or the api. It is the only process that dials out to untrusted hosts, behind an SSRF-guarded fetch; the api reaches monitored servers only through the worker.
 
 ### Probe data flow
 
@@ -56,7 +56,9 @@ Needs Docker.
 docker compose up --build
 ```
 
-This starts Postgres, runs the migrations, then starts the api (`localhost:8080`, reference at `/reference`), the worker, the demo server (`localhost:3001`) and a scheduler container that stands in for Cloud Scheduler. Service-to-service calls use a static token (`KEELSON_INTERNAL_TOKEN`, default `local-dev-token`). The worker is allowed to reach private and plain-HTTP targets locally; the deployed worker is not.
+This starts Postgres, runs the migrations, then starts the api (`localhost:8080`, reference at `/reference`, dashboard at `/`), the worker, the demo server (`localhost:3001`) and a scheduler container that stands in for Cloud Scheduler. Service-to-service calls use a static token (`KEELSON_INTERNAL_TOKEN`, default `local-dev-token`). The worker is allowed to reach private and plain-HTTP targets locally; the deployed worker is not.
+
+The api serves the built dashboard from `DASHBOARD_DIR` (default `apps/dashboard/dist`, which the api image already contains). Without a build it serves the API only.
 
 Create a tenant. The API key is shown once:
 
@@ -64,7 +66,7 @@ Create a tenant. The API key is shown once:
 docker compose run --rm api node apps/api/dist/commands/create-tenant.js --name demo
 ```
 
-Register the public servers Keelson monitors first (DeepWiki, Microsoft Learn, Cloudflare Docs, Context7, Hugging Face), skipping any already registered:
+Register the public servers Keelson monitors first (DeepWiki, Microsoft Learn, Cloudflare Docs, Context7, Hugging Face), skipping any already registered. The script runs on the host, so it needs Node 24 (see `.nvmrc`) and a prior `npm ci`:
 
 ```bash
 KEELSON_API_URL=http://localhost:8080 KEELSON_API_KEY=<key> npm run seed
@@ -99,6 +101,16 @@ Keelson runs on Cloud Run, Cloud Tasks, Cloud Scheduler and Secret Manager, defi
 2. Every push to `main` that passes CI is deployed by `.github/workflows/deploy.yml`: build and push the images, apply the main stack, migrate. Pull requests get a read-only preview.
 
 `scripts/deploy.sh` does the same from a laptop for the first deploy.
+
+The Pulumi programs are compiled before Pulumi runs them: `npm ci --prefix infra && npm run build --prefix infra`. The script and both workflows do this; do it yourself before any `pulumi` command.
+
+The first `pulumi up` can fail once on the alert policy while the log-based metric it counts is still propagating. Run it again.
+
+The deployed api and the demo server are open to the internet; the demo server's admin route needs its bearer token. To create a tenant on the deployed system, run the job with the name as an argument (a name cannot contain commas). The API key appears once in that execution's logs:
+
+```bash
+gcloud run jobs execute keelson-create-tenant --args=--name=<name> --project <project> --region <region> --wait
+```
 
 ## Scaling path
 

@@ -1,5 +1,6 @@
 import type { ProbeJob, ProbeQueue } from '@keelson/application';
 import type { InternalCaller } from '../internal-auth/internal-caller.js';
+import { writeErrorLog } from './structured-log.js';
 
 export interface HttpProbeQueueConfig {
   workerUrl: string;
@@ -14,9 +15,7 @@ const DELIVERY_TIMEOUT_MS = 60_000;
 // collects logs, rather than being swallowed or surfacing as an unhandled rejection.
 function writeUnreportedFailure(job: ProbeJob, reportingError: unknown): void {
   const message = reportingError instanceof Error ? reportingError.message : String(reportingError);
-  process.stdout.write(
-    `${JSON.stringify({ severity: 'ERROR', event: 'probe.enqueue_failure_unreported', monitorId: job.monitorId, slot: job.slot, error: message })}\n`,
-  );
+  writeErrorLog('probe.enqueue_failure_unreported', { monitorId: job.monitorId, slot: job.slot, error: message });
 }
 
 // Local and e2e stand-in for Cloud Tasks. Like Cloud Tasks it accepts the job and returns at once: the worker's probe

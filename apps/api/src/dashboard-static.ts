@@ -13,7 +13,7 @@ interface ClientRoute {
 
 // Paths the API owns. An unknown path under one of these must stay a problem+json 404 that an API client can
 // parse, so the dashboard shell is never answered for them.
-const API_PATH_PREFIXES = ['/v1', '/mcp', '/internal', '/reference', '/openapi.yaml', '/healthz'];
+const API_PATH_PREFIXES = ['/v1', '/mcp', '/internal', '/reference', '/openapi.yaml', '/health'];
 
 function isApiPath(path: string): boolean {
   return API_PATH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));

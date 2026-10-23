@@ -1,5 +1,5 @@
 import type { Alert } from '@keelson/domain';
-import type { Outbox, OutboxMessage } from '@keelson/application';
+import type { Outbox, OutboxFailure, OutboxMessage } from '@keelson/application';
 import type { Queryable, RepositoryDeps } from './queryable.js';
 
 // The alert is stored as JSON, which turns its Date into a string.
@@ -14,6 +14,7 @@ interface OutboxRow {
   attempts: number;
   next_attempt_at: Date;
   sent_at: Date | null;
+  last_error: string | null;
 }
 
 function toOutboxMessage(row: OutboxRow): OutboxMessage {
@@ -26,6 +27,7 @@ function toOutboxMessage(row: OutboxRow): OutboxMessage {
     attempts: row.attempts,
     nextAttemptAt: row.next_attempt_at,
     sentAt: row.sent_at,
+    lastError: row.last_error,
   };
 }
 
@@ -80,8 +82,8 @@ export class PostgresOutbox implements Outbox {
     return this.update(id, 'sent_at = $2', now);
   }
 
-  markFailed(id: string, attempts: number, nextAttemptAt: Date): Promise<void> {
-    return this.update(id, 'attempts = $2, next_attempt_at = $3', attempts, nextAttemptAt);
+  markFailed(id: string, { attempts, nextAttemptAt, lastError }: OutboxFailure): Promise<void> {
+    return this.update(id, 'attempts = $2, next_attempt_at = $3, last_error = $4', attempts, nextAttemptAt, lastError);
   }
 
   private async update(id: string, assignments: string, ...values: unknown[]): Promise<void> {

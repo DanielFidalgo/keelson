@@ -126,6 +126,7 @@ function buildMessage(overrides: Partial<OutboxMessage> = {}): OutboxMessage {
     attempts: 0,
     nextAttemptAt: NOW,
     sentAt: null,
+    lastError: null,
     ...overrides,
   };
 }
@@ -154,7 +155,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 describe('migrate', () => {
-  it('applies 0001 once; a second run applies nothing', async () => {
+  it('applies every migration once; a second run applies nothing', async () => {
     await pool.query('create database migration_check');
     const databaseUrl = new URL(container.getConnectionUri());
     databaseUrl.pathname = '/migration_check';
@@ -162,7 +163,7 @@ describe('migrate', () => {
     const first = await migrate({ databaseUrl: databaseUrl.href, directory: MIGRATIONS_DIRECTORY });
     const second = await migrate({ databaseUrl: databaseUrl.href, directory: MIGRATIONS_DIRECTORY });
 
-    expect(first).toEqual(['0001_initial']);
+    expect(first).toEqual(['0001_initial', '0002_outbox_last_error']);
     expect(second).toEqual([]);
   });
 });
@@ -525,14 +526,14 @@ describe('outbox', () => {
     expect(await unitOfWork.run((tx) => tx.outbox.claimDue(minutesAfterNow(60), minutesAfterNow(65), 10))).toEqual([]);
   });
 
-  it('markFailed records the attempts and the next attempt time', async () => {
+  it('markFailed records the attempts, the next attempt time and why the delivery failed', async () => {
     await unitOfWork.run((tx) => tx.outbox.enqueue([buildMessage()]));
     const retryAt = minutesAfterNow(2);
 
-    await unitOfWork.run((tx) => tx.outbox.markFailed('out_1', 1, retryAt));
+    await unitOfWork.run((tx) => tx.outbox.markFailed('out_1', { attempts: 1, nextAttemptAt: retryAt, lastError: 'HTTP 500' }));
 
     const claimed = await unitOfWork.run((tx) => tx.outbox.claimDue(retryAt, minutesAfterNow(7), 10));
-    expect(claimed.map((message) => [message.id, message.attempts])).toEqual([['out_1', 1]]);
+    expect(claimed.map((message) => [message.id, message.attempts, message.lastError])).toEqual([['out_1', 1, 'HTTP 500']]);
   });
 
   it('rejects marking a message that does not exist', async () => {

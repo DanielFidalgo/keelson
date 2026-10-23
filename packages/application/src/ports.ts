@@ -79,6 +79,14 @@ export interface OutboxMessage {
   attempts: number;
   nextAttemptAt: Date;
   sentAt: Date | null;
+  // Why the latest delivery attempt failed; kept after a later success as the last problem this message had.
+  lastError: string | null;
+}
+
+export interface OutboxFailure {
+  attempts: number;
+  nextAttemptAt: Date;
+  lastError: string;
 }
 
 export interface Outbox {
@@ -86,7 +94,7 @@ export interface Outbox {
   // Only unsent messages of active endpoints are due; a disabled endpoint's messages wait until it is re-enabled.
   claimDue(now: Date, leaseUntil: Date, limit: number): Promise<OutboxMessage[]>;
   markSent(id: string, now: Date): Promise<void>;
-  markFailed(id: string, attempts: number, nextAttemptAt: Date): Promise<void>;
+  markFailed(id: string, failure: OutboxFailure): Promise<void>;
 }
 
 export interface TenantRepository {

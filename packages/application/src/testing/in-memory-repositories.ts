@@ -16,6 +16,7 @@ import type {
   IncidentRepository,
   MonitorRepository,
   Outbox,
+  OutboxFailure,
   OutboxMessage,
   Page,
   PageRequest,
@@ -219,8 +220,8 @@ export class InMemoryOutbox implements Outbox {
     return this.update(id, { sentAt: now });
   }
 
-  markFailed(id: string, attempts: number, nextAttemptAt: Date): Promise<void> {
-    return this.update(id, { attempts, nextAttemptAt });
+  markFailed(id: string, failure: OutboxFailure): Promise<void> {
+    return this.update(id, failure);
   }
 
   private update(id: string, changes: Partial<OutboxMessage>): Promise<void> {

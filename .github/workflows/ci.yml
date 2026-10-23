@@ -49,7 +49,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: infra/package-lock.json
-      - run: npm ci --prefix infra
+      # Pulumi runs the compiled programs: its bundled TypeScript cannot read this repository's tsconfig.
+      - run: npm ci --prefix infra && npm run build --prefix infra
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}

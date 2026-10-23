@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    // The program also compiles the modules it shares with the main stack, so its sources are one level up.
+    "rootDir": "..",
+    "outDir": "bin"
+  },
+  "include": ["*.ts", "../shared-names.ts", "../iam.ts"],
+  "exclude": ["*.test.ts"]
+}

@@ -28,6 +28,7 @@ export async function recordAlerts(
       attempts: FIRST_ATTEMPT,
       nextAttemptAt: now,
       sentAt: null,
+      lastError: null,
     }),
   );
   await tx.outbox.enqueue(messages);

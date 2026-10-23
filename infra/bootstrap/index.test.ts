@@ -13,15 +13,18 @@ import {
 const REPOSITORY_ID = '987654321';
 const STATE_BUCKET = 'keelson-test-state';
 const POOL_PATH = `projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions`;
-const FORBIDDEN_DEPLOYER_ROLES = [
-  'roles/owner',
-  'roles/editor',
-  'roles/resourcemanager.projectIamAdmin',
-  'roles/iam.roleAdmin',
-  'roles/iam.serviceAccountAdmin',
-  'roles/iam.workloadIdentityPoolAdmin',
-  'roles/secretmanager.admin',
-  'roles/secretmanager.secretAccessor',
+// Pinned in full: a role added to the deployer must show up here as a deliberate change. None of these can edit
+// project IAM, define roles or read a secret's value. logging.configWriter is left out on purpose, because it also
+// lets its holder create log sinks and exclusions, which could silence the probe-failure alert.
+const DEPLOYER_ROLES = [
+  'roles/run.admin',
+  'roles/cloudtasks.admin',
+  'roles/cloudscheduler.admin',
+  'roles/artifactregistry.admin',
+  `projects/${PROJECT}/roles/keelsonLogMetricsManager`,
+  'roles/monitoring.alertPolicyEditor',
+  'roles/monitoring.notificationChannelEditor',
+  'roles/serviceusage.serviceUsageConsumer',
 ];
 const SECRET_NAME_CONDITION = `resource.name.startsWith("projects/${PROJECT_NUMBER}/secrets/monitor-") || resource.name.startsWith("projects/${PROJECT_NUMBER}/secrets/webhook-")`;
 
@@ -68,12 +71,23 @@ describe('Keelson bootstrap stack', () => {
     );
   });
 
-  it('gives the deployer no right to edit project IAM, define roles or read secrets', () => {
-    const roles = grantsTo('keelson-deployer').map((grant) => grant.role);
+  it('gives the deployer exactly these project roles and no conditional or other custom ones', () => {
+    const grants = grantsTo('keelson-deployer');
 
-    for (const forbidden of FORBIDDEN_DEPLOYER_ROLES) expect(roles).not.toContain(forbidden);
-    expect(roles.every((role) => !role.startsWith('projects/'))).toBe(true);
-    expect(grantsTo('keelson-deployer').every((grant) => grant.condition === undefined)).toBe(true);
+    expect(grants.map((grant) => grant.role).sort()).toEqual([...DEPLOYER_ROLES].sort());
+    expect(grants.every((grant) => grant.condition === undefined)).toBe(true);
+  });
+
+  it('defines the log metrics role with only the five log-based metric permissions', () => {
+    const role = ofType('gcp:projects/iAMCustomRole:IAMCustomRole').find((candidate) => candidate.inputs['roleId'] === 'keelsonLogMetricsManager');
+
+    expect(role?.inputs['permissions']).toEqual([
+      'logging.logMetrics.create',
+      'logging.logMetrics.get',
+      'logging.logMetrics.list',
+      'logging.logMetrics.update',
+      'logging.logMetrics.delete',
+    ]);
   });
 
   it('lets the deployer act only as the runtime accounts it deploys, and the api act as the tasks account', () => {

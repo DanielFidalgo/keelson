@@ -2,7 +2,17 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(dashboard): add monitors, drift and incidents views
+## pending: docs(plan): drop process wording and rename the health route
+
+Removes maintainer-process wording from the plan now that the repository is public, and updates the plan's health route to `/health`.
+
+## pending: fix: close final-review gaps before first deploy
+
+Pulumi now runs ahead-of-time compiled programs (`infra/bin`, built with `typescript` 6.0.3), because its bundled ts-node rejected the shared tsconfig, and the migrate and create-tenant jobs carry their script in `commands` so `--args=--name=x` reaches it. A failed webhook delivery now keeps its reason (`outbox.last_error`, migration 0002) and the worker logs one `webhook.delivery_failed` event per failure; `/healthz` became `/health` because Cloud Run reserves paths ending in `z`.
+
+The deployer lost `roles/logging.configWriter` (it could create sinks that silence the probe-failure alert) for a custom role with the five log-metric permissions, and `roles/browser` as redundant. The pool's error log is now the Cloud Logging shape, the worker's startup and shutdown match the api's, and the README and deploy script say what a first deploy needs.
+
+## 1d38f5a: feat(dashboard): add monitors, drift and incidents views
 
 Adds `apps/dashboard`, a Vue 3 and Vite single-page app over the `/v1` API: the monitor list, a monitor page with probe history, the current drift as a diff that marks critical and breaking changes, and an approve button, and the open incidents with an acknowledge button. Its API types are generated from `openapi.yaml` by `npm run api:types`, committed, and checked in CI. Probed-server text is only ever interpolated as text, and the API key lives in `sessionStorage` and travels only in the `Authorization` header.
 

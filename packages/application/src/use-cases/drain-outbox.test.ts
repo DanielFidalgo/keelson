@@ -1,7 +1,7 @@
 import { MAX_CONSECUTIVE_DELIVERY_FAILURES } from '@keelson/domain';
 import { describe, expect, it } from 'vitest';
 import { FixedClock } from '../testing/index.js';
-import { DRAIN_BATCH_LIMIT, DrainOutbox } from './drain-outbox.js';
+import { DRAIN_BATCH_LIMIT, DrainOutbox, MAX_FAILURE_REASON_LENGTH } from './drain-outbox.js';
 import {
   createHarness,
   NOW,
@@ -35,7 +35,7 @@ describe('DrainOutbox', () => {
 
     const result = await new DrainOutbox(harness.deps).execute();
 
-    expect(result).toEqual({ sent: 1, failed: 0 });
+    expect(result).toEqual({ sent: 1, failed: 0, failures: [] });
     expect(message(harness, 'out_1')?.sentAt).toEqual(NOW);
     expect(endpoint(harness, 'whk_1')?.consecutiveFailures).toBe(0);
     expect(harness.channels.slack.deliveries).toEqual([
@@ -57,13 +57,61 @@ describe('DrainOutbox', () => {
 
     const result = await new DrainOutbox(harness.deps).execute();
 
-    expect(result).toEqual({ sent: 0, failed: 1 });
+    expect(result).toMatchObject({ sent: 0, failed: 1 });
     expect(message(harness, 'out_1')).toMatchObject({
       sentAt: null,
       attempts: 1,
       nextAttemptAt: new Date(NOW.getTime() + ONE_MINUTE_MS),
     });
     expect(endpoint(harness, 'whk_1')?.consecutiveFailures).toBe(1);
+  });
+
+  it('keeps the reason of a failed delivery on the message', async () => {
+    const harness = createHarness();
+    await seedEndpoint(harness, 'whk_1');
+    await seedOutboxMessage(harness, 'out_1', 'whk_1');
+    harness.channels.slack.respondWith({ delivered: false, reason: 'HTTP 500' });
+
+    await new DrainOutbox(harness.deps).execute();
+
+    expect(message(harness, 'out_1')?.lastError).toBe('HTTP 500');
+  });
+
+  it('bounds a very long failure reason before it is stored', async () => {
+    const harness = createHarness();
+    await seedEndpoint(harness, 'whk_1');
+    await seedOutboxMessage(harness, 'out_1', 'whk_1');
+    harness.channels.slack.respondWith({ delivered: false, reason: 'x'.repeat(MAX_FAILURE_REASON_LENGTH + 100) });
+
+    const result = await new DrainOutbox(harness.deps).execute();
+
+    expect(message(harness, 'out_1')?.lastError).toHaveLength(MAX_FAILURE_REASON_LENGTH);
+    expect(result.failures[0]?.reason).toHaveLength(MAX_FAILURE_REASON_LENGTH);
+  });
+
+  it('reports each failed delivery with the attempt count and the reason', async () => {
+    const harness = createHarness();
+    await seedEndpoint(harness, 'whk_1');
+    await seedOutboxMessage(harness, 'out_1', 'whk_1');
+    harness.channels.slack.respondWith({ delivered: false, reason: 'HTTP 500' });
+
+    const result = await new DrainOutbox(harness.deps).execute();
+
+    expect(result.failures).toEqual([
+      { messageId: 'msg_out_1', incidentId: 'inc_1', endpointId: 'whk_1', attempts: 1, reason: 'HTTP 500', endpointDisabled: false },
+    ]);
+  });
+
+  it('flags the failure that disabled the endpoint', async () => {
+    const harness = createHarness();
+    await seedEndpoint(harness, 'whk_1');
+    await failEndpointNineTimes(harness, 'whk_1');
+    await seedOutboxMessage(harness, 'out_1', 'whk_1');
+    harness.channels.slack.respondWith({ delivered: false, reason: 'HTTP 410' });
+
+    const result = await new DrainOutbox(harness.deps).execute();
+
+    expect(result.failures.map((failure) => failure.endpointDisabled)).toEqual([true]);
   });
 
   it('a channel that throws counts as a failed delivery instead of crashing the drain', async () => {
@@ -75,8 +123,8 @@ describe('DrainOutbox', () => {
 
     const result = await new DrainOutbox(harness.deps).execute();
 
-    expect(result).toEqual({ sent: 1, failed: 1 });
-    expect(message(harness, 'out_1')).toMatchObject({ sentAt: null, attempts: 1 });
+    expect(result).toMatchObject({ sent: 1, failed: 1 });
+    expect(message(harness, 'out_1')).toMatchObject({ sentAt: null, attempts: 1, lastError: 'connection reset' });
     expect(message(harness, 'out_2')?.sentAt).toEqual(NOW);
   });
 
@@ -93,8 +141,8 @@ describe('DrainOutbox', () => {
     const second = await new DrainOutbox({ ...harness.deps, clock: later }).execute();
 
     expect(endpoint(harness, 'whk_1')?.status).toBe('disabled');
-    expect(first).toEqual({ sent: 0, failed: 1 });
-    expect(second).toEqual({ sent: 0, failed: 0 });
+    expect(first).toMatchObject({ sent: 0, failed: 1 });
+    expect(second).toEqual({ sent: 0, failed: 0, failures: [] });
     expect(harness.channels.slack.deliveries).toHaveLength(1);
     expect(message(harness, 'out_2')?.sentAt).toBeNull();
   });
@@ -121,7 +169,7 @@ describe('DrainOutbox', () => {
     await drain.execute();
     const second = await drain.execute();
 
-    expect(second).toEqual({ sent: 0, failed: 0 });
+    expect(second).toEqual({ sent: 0, failed: 0, failures: [] });
     expect(harness.channels.slack.deliveries).toHaveLength(1);
   });
 

@@ -34,9 +34,9 @@ export function buildWorkerServer(container: AwilixContainer<WorkerCradle>): Fas
     return reply.code(SERVER_ERROR).send({ error: 'internal error' });
   });
 
-  server.get('/healthz', () => ({ status: 'ok' }));
+  server.get('/health', () => ({ status: 'ok' }));
 
-  // Encapsulated so the authentication hook covers exactly the internal routes and never /healthz.
+  // Encapsulated so the authentication hook covers exactly the internal routes and never /health.
   void server.register((internal, _options, done) => {
     internal.addHook('onRequest', requireInternalCaller);
     registerProbeRoute(internal);

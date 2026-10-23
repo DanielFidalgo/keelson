@@ -1,5 +1,5 @@
 import type { Alert, RawCatalog, WebhookFormat } from '@keelson/domain';
-import { newMonitor, newWebhookEndpoint } from '@keelson/domain';
+import { MAX_CONSECUTIVE_DELIVERY_FAILURES, newMonitor, newWebhookEndpoint } from '@keelson/domain';
 import type { Inspection } from '@keelson/application';
 import {
   FakeInspector,
@@ -21,6 +21,7 @@ const INTERNAL_TOKEN = 'test-internal-token';
 const AUTHORIZED = { authorization: `Bearer ${INTERNAL_TOKEN}` };
 const NOW = new Date('2026-10-22T12:00:00Z');
 const MONITOR_ID = 'mon_1';
+const WEBHOOK_URL_SECRET = 'hook-token-in-query';
 const SECRET_BEARER_TOKEN = 'super-secret-bearer-token';
 const CATALOG: RawCatalog = {
   tools: [{ name: 'search', description: 'Searches the docs', inputSchema: { type: 'object' } }],
@@ -76,6 +77,28 @@ async function seedMonitor(unitOfWork: InMemoryUnitOfWork): Promise<void> {
   await unitOfWork.transaction.monitors.save(monitor);
 }
 
+async function seedPendingAlert(unitOfWork: InMemoryUnitOfWork, consecutiveFailures = 0): Promise<void> {
+  const endpoint = newWebhookEndpoint(
+    { id: 'whk_1', tenantId: 'ten_1', url: `https://hooks.example.com/1?token=${WEBHOOK_URL_SECRET}`, format: 'slack', secretRef: null },
+    NOW,
+  );
+  const alert: Alert = {
+    type: 'incident.opened',
+    incidentId: 'inc_1',
+    monitorId: MONITOR_ID,
+    monitorName: 'Docs',
+    kind: 'down',
+    severity: null,
+    changes: [],
+    resolution: null,
+    occurredAt: NOW,
+  };
+  await unitOfWork.transaction.webhookEndpoints.save({ ...endpoint, consecutiveFailures });
+  await unitOfWork.transaction.outbox.enqueue([
+    { id: 'out_1', incidentId: 'inc_1', endpointId: 'whk_1', alert, idempotencyKey: 'msg_1', attempts: 0, nextAttemptAt: NOW, sentAt: null, lastError: null },
+  ]);
+}
+
 const probeRequest = (headers: Record<string, string> = AUTHORIZED) => ({
   method: 'POST' as const,
   url: '/internal/probe',
@@ -102,8 +125,8 @@ describe('worker server', () => {
     expect(inspector.targets).toEqual([]);
   });
 
-  it('GET /healthz needs no credentials', async () => {
-    const response = await startWorker().server.inject({ method: 'GET', url: '/healthz' });
+  it('GET /health needs no credentials', async () => {
+    const response = await startWorker().server.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
   });
@@ -185,30 +208,45 @@ describe('worker server', () => {
 
   it('POST /internal/outbox/drain returns { sent, failed }', async () => {
     const { server: worker, unitOfWork, channels } = startWorker();
-    const endpoint = newWebhookEndpoint(
-      { id: 'whk_1', tenantId: 'ten_1', url: 'https://hooks.example.com/1', format: 'slack', secretRef: null },
-      NOW,
-    );
-    const alert: Alert = {
-      type: 'incident.opened',
-      incidentId: 'inc_1',
-      monitorId: MONITOR_ID,
-      monitorName: 'Docs',
-      kind: 'down',
-      severity: null,
-      changes: [],
-      resolution: null,
-      occurredAt: NOW,
-    };
-    await unitOfWork.transaction.webhookEndpoints.save(endpoint);
-    await unitOfWork.transaction.outbox.enqueue([
-      { id: 'out_1', incidentId: 'inc_1', endpointId: 'whk_1', alert, idempotencyKey: 'msg_1', attempts: 0, nextAttemptAt: NOW, sentAt: null },
-    ]);
+    await seedPendingAlert(unitOfWork);
 
     const response = await worker.inject({ method: 'POST', url: '/internal/outbox/drain', headers: AUTHORIZED });
 
     expect(response.json()).toEqual({ sent: 1, failed: 0 });
     expect(channels.slack.deliveries).toHaveLength(1);
+  });
+
+  it('logs a failed delivery at warn level without the endpoint url or the alert', async () => {
+    const { server: worker, unitOfWork, channels, logged } = startWorker();
+    await seedPendingAlert(unitOfWork);
+    channels.slack.respondWith({ delivered: false, reason: 'HTTP 500' });
+
+    const response = await worker.inject({ method: 'POST', url: '/internal/outbox/drain', headers: AUTHORIZED });
+
+    expect(response.json()).toEqual({ sent: 0, failed: 1 });
+    const failures = logged().filter((line) => line['event'] === 'webhook.delivery_failed');
+    expect(failures).toEqual([
+      expect.objectContaining({
+        severity: 'WARN',
+        messageId: 'msg_1',
+        incidentId: 'inc_1',
+        endpointId: 'whk_1',
+        attempts: 1,
+        reason: 'HTTP 500',
+      }),
+    ]);
+    expect(JSON.stringify(failures)).not.toContain(WEBHOOK_URL_SECRET);
+    expect(JSON.stringify(failures)).not.toContain('Docs');
+  });
+
+  it('logs the delivery failure that disables an endpoint at error level', async () => {
+    const { server: worker, unitOfWork, channels, logged } = startWorker();
+    await seedPendingAlert(unitOfWork, MAX_CONSECUTIVE_DELIVERY_FAILURES - 1);
+    channels.slack.respondWith({ delivered: false, reason: 'HTTP 410' });
+
+    await worker.inject({ method: 'POST', url: '/internal/outbox/drain', headers: AUTHORIZED });
+
+    expect(logged().find((line) => line['event'] === 'webhook.delivery_failed')).toMatchObject({ severity: 'ERROR', reason: 'HTTP 410' });
   });
 
   it('never logs a request body or the credentials it carries', async () => {
@@ -230,7 +268,7 @@ describe('worker server', () => {
   it('links log lines to the Cloud Trace of the request', async () => {
     const { server: worker, logged } = startWorker();
 
-    await worker.inject({ method: 'GET', url: '/healthz', headers: { 'x-cloud-trace-context': '105445aa7843bc8bf206b12000100000/1;o=1' } });
+    await worker.inject({ method: 'GET', url: '/health', headers: { 'x-cloud-trace-context': '105445aa7843bc8bf206b12000100000/1;o=1' } });
 
     expect(logged()).toContainEqual(
       expect.objectContaining({ 'logging.googleapis.com/trace': 'projects/keelson-test/traces/105445aa7843bc8bf206b12000100000' }),

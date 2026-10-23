@@ -182,9 +182,21 @@ describe('Keelson infrastructure', () => {
     const migrate = ofType('gcp:cloudrunv2/job:Job').find((job) => job.inputs['name'] === 'keelson-migrate');
     const inputs = JSON.stringify(migrate?.inputs);
 
-    expect(inputs).toContain('apps/api/dist/commands/migrate.js');
     expect(inputs).toContain(`${REGION}-docker.pkg.dev/${PROJECT}/keelson/api:test-tag`);
     expect(inputs).toContain('"secret":"database-url"');
+  });
+
+  // `gcloud run jobs execute --args=...` replaces the container's args, so the script must live in the command or
+  // the arguments passed at execution would run as `node --name=x` instead of `node <script> --name=x`.
+  it.each([
+    ['keelson-migrate', 'apps/api/dist/commands/migrate.js'],
+    ['keelson-create-tenant', 'apps/api/dist/commands/create-tenant.js'],
+  ])('%s puts its script in the command and leaves args free for execute-time arguments', (jobName, script) => {
+    const job = ofType('gcp:cloudrunv2/job:Job').find((candidate) => candidate.inputs['name'] === jobName);
+    const [container] = (job?.inputs['template'] as { template: { containers: Array<{ commands?: string[]; args?: string[] }> } }).template.containers;
+
+    expect(container?.commands).toEqual(['node', script]);
+    expect(container?.args).toBeUndefined();
   });
 
   it('a log-based metric on probe.retries_exhausted feeds an alert policy', () => {

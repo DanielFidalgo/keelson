@@ -16,12 +16,12 @@
 #      trust and the deployer's grants. The numeric repository id is shown by
 #        gh api repos/DanielFidalgo/keelson --jq .id
 #        export PULUMI_BACKEND_URL="gs://$PULUMI_STATE_BUCKET" PULUMI_CONFIG_PASSPHRASE=""
-#        npm ci --prefix infra
+#        npm ci --prefix infra && npm run build --prefix infra
 #        pulumi stack init bootstrap --cwd infra/bootstrap
 #        pulumi config set repositoryId <id> --cwd infra/bootstrap --stack bootstrap
 #        pulumi config set stateBucket "$PULUMI_STATE_BUCKET" --cwd infra/bootstrap --stack bootstrap
 #        pulumi up --cwd infra/bootstrap --stack bootstrap
-#      Then commit infra/bootstrap/Pulumi.bootstrap.yaml and set the repository variables
+#      Then commit infra/bootstrap/Pulumi.bootstrap.yaml (it holds the stack's encryptionsalt) and set the repository variables
 #      GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOYER_SERVICE_ACCOUNT and GCP_PREVIEW_SERVICE_ACCOUNT from
 #      `pulumi stack output --cwd infra/bootstrap --stack bootstrap`, and PULUMI_STATE_BUCKET.
 #   5. Secret values. The bootstrap stack creates the empty secrets; this script stops until they hold a value:
@@ -67,7 +67,11 @@ require_secret_value() {
 
 IMAGE_TAG="${IMAGE_TAG:-$(default_image_tag)}"
 
+# Pulumi runs the compiled programs: its bundled TypeScript cannot read this repository's tsconfig.
 npm ci --prefix "$INFRA_DIRECTORY"
+npm run build --prefix "$INFRA_DIRECTORY"
+# The first run creates the stack and writes its encryptionsalt into infra/Pulumi.dev.yaml. CI opens the stack with
+# the same empty passphrase and needs that salt, so the file must be committed after this run (the script reminds you).
 pulumi stack select "$STACK" --create --cwd "$INFRA_DIRECTORY"
 PROJECT="$(pulumi_in_stack config get gcp:project)"
 REGION="$(pulumi_in_stack config get gcp:region)"
@@ -98,3 +102,7 @@ done
 pulumi_up
 
 gcloud run jobs execute keelson-migrate --project "$PROJECT" --region "$REGION" --wait
+
+if [[ -n "$(git -C "$REPOSITORY_ROOT" status --porcelain -- infra/Pulumi.dev.yaml)" ]]; then
+  echo "infra/Pulumi.dev.yaml changed (the new stack's encryptionsalt). Commit it, or CI cannot open the stack." >&2
+fi

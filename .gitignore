@@ -7,3 +7,4 @@ coverage/
 .superpowers/
 .gitnexus/
 .DS_Store
+bin/

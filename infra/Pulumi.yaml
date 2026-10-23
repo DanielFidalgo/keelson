@@ -1,6 +1,8 @@
 name: keelson
 description: Keelson on Cloud Run, Cloud Tasks and Cloud Scheduler
+# Compiled ahead of time (npm run build --prefix infra): Pulumi's bundled ts-node cannot read this repository's tsconfig.
+main: bin/index.js
 runtime:
   name: nodejs
   options:
-    typescript: true
+    typescript: false

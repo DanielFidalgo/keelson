@@ -1,8 +1,8 @@
 name: keelson-bootstrap
 description: Identities, roles, secrets and CI access that the Keelson stack runs on; applied once by a person
+# Compiled ahead of time together with the main stack (npm run build --prefix infra).
+main: bin/bootstrap/index.js
 runtime:
   name: nodejs
   options:
-    typescript: true
-# The shared package.json names the main program as its entry point, so this one is named here.
-main: index.ts
+    typescript: false

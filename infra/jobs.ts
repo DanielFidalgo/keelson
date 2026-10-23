@@ -12,7 +12,6 @@ export interface JobInputs {
 }
 
 // The api image is built from the whole workspace, so the commands are plain files inside it.
-const NODE_COMMAND = ['node'];
 const MIGRATE_SCRIPT = 'apps/api/dist/commands/migrate.js';
 const CREATE_TENANT_SCRIPT = 'apps/api/dist/commands/create-tenant.js';
 
@@ -29,8 +28,9 @@ function createApiImageJob(name: string, script: string, { config, accounts, url
         containers: [
           {
             image: imageReference(config, 'api'),
-            commands: NODE_COMMAND,
-            args: [script],
+            // Args stay empty on purpose: `gcloud run jobs execute --args=...` replaces them, so the script has to be
+            // part of the command for those arguments to reach it.
+            commands: ['node', script],
             envs: apiEnvironment({ config, accounts, urls }),
           },
         ],
@@ -39,7 +39,7 @@ function createApiImageJob(name: string, script: string, { config, accounts, url
   });
 }
 
-// create-tenant takes its --name when executed: `gcloud run jobs execute keelson-create-tenant --args=...`.
+// create-tenant takes its --name when executed: `gcloud run jobs execute keelson-create-tenant --args=--name=<name> --wait`.
 export function createJobs(inputs: JobInputs): { migrate: gcp.cloudrunv2.Job; createTenant: gcp.cloudrunv2.Job } {
   return {
     migrate: createApiImageJob('keelson-migrate', MIGRATE_SCRIPT, inputs),

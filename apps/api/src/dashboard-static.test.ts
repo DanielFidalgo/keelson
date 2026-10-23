@@ -90,7 +90,7 @@ describe('serving the dashboard', () => {
   it('leaves the API paths to the API', async () => {
     const api = serverServing(builtDashboard());
 
-    const health = await api.inject({ method: 'GET', url: '/healthz' });
+    const health = await api.inject({ method: 'GET', url: '/health' });
     const specification = await api.inject({ method: 'GET', url: '/openapi.yaml' });
     const reference = await api.inject({ method: 'GET', url: '/reference/' });
     const unauthorized = await api.inject({ method: 'GET', url: '/v1/monitors', headers: BROWSER_NAVIGATION });
@@ -102,7 +102,7 @@ describe('serving the dashboard', () => {
     expect(unauthorized.headers['content-type']).toContain(PROBLEM_JSON);
   });
 
-  it.each(['/v1/nothing-here', '/v1', '/mcp/other', '/internal/other', '/reference/other', '/healthz/other'])(
+  it.each(['/v1/nothing-here', '/v1', '/mcp/other', '/internal/other', '/reference/other', '/health/other'])(
     'keeps the unknown API path %s a problem+json 404 even for a browser',
     async (path) => {
       const api = serverServing(builtDashboard());
@@ -128,7 +128,7 @@ describe('without a built dashboard', () => {
   it('starts and keeps answering problem+json when the directory does not exist', async () => {
     const api = serverServing(join(workDirectory, 'not-built'));
 
-    const health = await api.inject({ method: 'GET', url: '/healthz' });
+    const health = await api.inject({ method: 'GET', url: '/health' });
     const root = await api.inject({ method: 'GET', url: '/', headers: BROWSER_NAVIGATION });
 
     expect(health.statusCode).toBe(200);

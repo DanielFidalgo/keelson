@@ -541,10 +541,10 @@ describe('documentation and health', () => {
     expect(document.body).toMatch(/^openapi: 3\.1\.0/);
   });
 
-  it('GET /healthz needs no credentials', async () => {
+  it('GET /health needs no credentials', async () => {
     const { server } = await api();
 
-    const response = await server.inject({ method: 'GET', url: '/healthz' });
+    const response = await server.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
   });

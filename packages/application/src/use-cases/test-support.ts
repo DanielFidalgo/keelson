@@ -121,6 +121,7 @@ export async function seedOutboxMessage(harness: Harness, id: string, endpointId
     attempts: 0,
     nextAttemptAt: NOW,
     sentAt: null,
+    lastError: null,
   };
   await harness.db.outbox.enqueue([message]);
 }

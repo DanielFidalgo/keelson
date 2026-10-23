@@ -26,5 +26,6 @@ export * from './system/credential-factory.js';
 export * from './system/file-secret-store.js';
 export * from './system/http-probe-queue.js';
 export * from './system/logging.js';
+export * from './system/structured-log.js';
 export * from './system/system-clock.js';
 export * from './system/uuid-generator.js';
