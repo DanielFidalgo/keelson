@@ -7,6 +7,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import openApiGlue from 'fastify-openapi-glue';
 import { securityHandlers } from './auth.js';
 import type { ApiCradle } from './container.js';
+import { registerDashboard } from './dashboard-static.js';
 import { serviceHandlers } from './handlers.js';
 import { registerInternalRoutes } from './internal-routes.js';
 import { registerKeelsonMcp } from './mcp/keelson-mcp-server.js';
@@ -54,6 +55,7 @@ export function buildApiServer(container: AwilixContainer<ApiCradle>): FastifyIn
   void server.register(openApiGlue, { specification, serviceHandlers, securityHandlers });
   registerInternalRoutes(server);
   registerKeelsonMcp(server);
+  registerDashboard(server, config.dashboardDirectory);
 
   return server;
 }

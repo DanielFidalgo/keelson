@@ -2,7 +2,13 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(api): expose read-only Keelson MCP tools
+## pending: feat(dashboard): add monitors, drift and incidents views
+
+Adds `apps/dashboard`, a Vue 3 and Vite single-page app over the `/v1` API: the monitor list, a monitor page with probe history, the current drift as a diff that marks critical and breaking changes, and an approve button, and the open incidents with an acknowledge button. Its API types are generated from `openapi.yaml` by `npm run api:types`, committed, and checked in CI. Probed-server text is only ever interpolated as text, and the API key lives in `sessionStorage` and travels only in the `Authorization` header.
+
+The api serves the build at `/` with `@fastify/static` from `DASHBOARD_DIR` (default `apps/dashboard/dist`) when it exists, falling back to `index.html` for browser navigations outside the API paths, which keep their problem+json 404s. The Dockerfile builds the dashboard and copies it into the api image only.
+
+## 995712e: feat(api): expose read-only Keelson MCP tools
 
 Adds `POST /mcp` to the api so an agent can ask which of its servers drifted. Three read-only tools, `list_monitors`, `get_drift` and `list_open_incidents`, call the existing queries and presenters, so they return what the REST API returns and never a secret reference. The route reuses the API-key security handler as an `onRequest` hook, so a missing or wrong key gets 401 before any MCP handling, and each request builds its own stateless server bound to the caller's tenant. A monitor that is missing or belongs to another tenant yields the same `isError` result. `get_drift` keeps probed-server text verbatim but adds an `untrustedContent` warning to its result and description, since that text is where a rug pull hides its instructions.
 

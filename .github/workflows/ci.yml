@@ -20,6 +20,8 @@ jobs:
       # infra is not a workspace: its Pulumi dependencies would otherwise change the OpenTelemetry version the apps run on.
       - run: npm ci --prefix infra
       - run: npm run typecheck
+      # The dashboard's API types are generated from openapi.yaml and committed; a stale file means the contract changed unnoticed.
+      - run: npm run api:types && git diff --exit-code apps/dashboard/src/api/schema.d.ts
       - run: npx tsc -p infra --noEmit
       - run: npm run lint
       - run: npm run deps:check

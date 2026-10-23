@@ -1,7 +1,8 @@
 # One Dockerfile, three images: docker build --build-arg APP=api|worker|demo-server .
 #
 # The build stage compiles the whole workspace, because every app imports the packages by their
-# compiled output. The runtime stage then copies only what one app needs to start.
+# compiled output. The runtime stage then copies only what one app needs to start; the dashboard's
+# static build goes into the api image alone.
 
 FROM node:24-slim AS build
 WORKDIR /app
@@ -10,6 +11,8 @@ COPY . .
 RUN npm ci
 # Emits dist/ for every package and app; Node runs the compiled JavaScript, never the TypeScript.
 RUN npm run typecheck
+# Built here, before the prune below removes Vite and the Vue compiler. Only the api image receives the result.
+RUN npm run build -w apps/dashboard
 # Drops devDependencies (the compiler, test tools), so none of them ship in an image.
 RUN npm prune --omit=dev
 
@@ -17,7 +20,7 @@ RUN npm prune --omit=dev
 ARG APP
 RUN mkdir -p /staging/apps \
  && cp -r "apps/${APP}" /staging/apps/ \
- && if [ "${APP}" = "api" ] && [ -d apps/dashboard/dist ]; then \
+ && if [ "${APP}" = "api" ]; then \
       mkdir -p /staging/apps/dashboard && cp -r apps/dashboard/dist /staging/apps/dashboard/; \
     fi
 

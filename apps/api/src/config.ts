@@ -2,6 +2,7 @@ import {
   createInternalAuthSchema,
   databaseSchema,
   parseConfigSections,
+  optionalText,
   requiredText,
   secretStoreSchema,
   serviceSchema,
@@ -9,6 +10,7 @@ import {
   type InternalAuthConfig,
   type SecretStoreConfig,
 } from '@keelson/infrastructure';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 export { ConfigError } from '@keelson/infrastructure';
@@ -24,7 +26,15 @@ export interface ApiConfig {
   internalAuth: InternalAuthConfig;
   secretStore: SecretStoreConfig;
   probeQueue: ProbeQueueConfig;
+  dashboardDirectory: string;
 }
+
+// The same relative path works from src/ and from the compiled dist/, and it is where the image puts the build.
+export const DEFAULT_DASHBOARD_DIRECTORY = fileURLToPath(new URL('../../dashboard/dist', import.meta.url));
+
+const dashboardSchema = z
+  .object({ DASHBOARD_DIR: optionalText })
+  .transform((env) => ({ dashboardDirectory: env.DASHBOARD_DIR ?? DEFAULT_DASHBOARD_DIRECTORY }));
 
 const workerSchema = z.object({ WORKER_URL: requiredText }).transform((env) => ({ workerUrl: env.WORKER_URL }));
 
@@ -53,13 +63,14 @@ const probeQueueSchema = z.preprocess(
 
 // Parsed once at startup.
 export function loadApiConfig(env: NodeJS.ProcessEnv): ApiConfig {
-  const { service, database, worker, internalAuth, secretStore, probeQueue } = parseConfigSections('api', env, {
+  const { service, database, worker, internalAuth, secretStore, probeQueue, dashboard } = parseConfigSections('api', env, {
     service: serviceSchema,
     database: databaseSchema,
     worker: workerSchema,
     internalAuth: internalAuthSchema,
     secretStore: secretStoreSchema,
     probeQueue: probeQueueSchema,
+    dashboard: dashboardSchema,
   });
-  return { ...service, ...database, ...worker, internalAuth, secretStore, probeQueue };
+  return { ...service, ...database, ...worker, internalAuth, secretStore, probeQueue, ...dashboard };
 }

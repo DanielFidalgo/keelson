@@ -16,7 +16,8 @@
     "lint": "eslint .",
     "deps:check": "depcruise packages $(test -d apps && echo apps)",
     "test": "vitest run",
-    "seed": "tsx scripts/seed-public-monitors.ts"
+    "seed": "tsx scripts/seed-public-monitors.ts",
+    "api:types": "openapi-typescript apps/api/openapi.yaml -o apps/dashboard/src/api/schema.d.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -24,9 +25,15 @@
     "dependency-cruiser": "^18.7.0",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
+    "openapi-typescript": "^7.13.0",
     "tsx": "^4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.72.0",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
   }
 }

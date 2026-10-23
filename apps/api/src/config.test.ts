@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadApiConfig } from './config.js';
+import { ConfigError, DEFAULT_DASHBOARD_DIRECTORY, loadApiConfig } from './config.js';
 
 const STATIC_LOCAL_ENV = {
   DATABASE_URL: 'postgres://keelson@localhost/keelson',
@@ -31,7 +31,17 @@ describe('loadApiConfig', () => {
       internalAuth: { mode: 'static', staticToken: 'local-token' },
       secretStore: { kind: 'file', directory: '/var/keelson/secrets' },
       probeQueue: { kind: 'http' },
+      dashboardDirectory: DEFAULT_DASHBOARD_DIRECTORY,
     });
+  });
+
+  it('serves the dashboard from DASHBOARD_DIR when set, and treats a blank value as unset', () => {
+    expect(loadApiConfig({ ...STATIC_LOCAL_ENV, DASHBOARD_DIR: '/srv/dashboard' }).dashboardDirectory).toBe('/srv/dashboard');
+    expect(loadApiConfig({ ...STATIC_LOCAL_ENV, DASHBOARD_DIR: '' }).dashboardDirectory).toBe(DEFAULT_DASHBOARD_DIRECTORY);
+  });
+
+  it('defaults to the dashboard build next to the api, which is where the image puts it', () => {
+    expect(DEFAULT_DASHBOARD_DIRECTORY).toMatch(/[\\/]apps[\\/]dashboard[\\/]dist$/);
   });
 
   it('parses a production configuration; the scheduler token audience is the api own URL', () => {
