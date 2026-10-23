@@ -2,7 +2,13 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: test(e2e): prove the rug-pull path end to end and document local runs
+## pending: feat(api): expose read-only Keelson MCP tools
+
+Adds `POST /mcp` to the api so an agent can ask which of its servers drifted. Three read-only tools, `list_monitors`, `get_drift` and `list_open_incidents`, call the existing queries and presenters, so they return what the REST API returns and never a secret reference. The route reuses the API-key security handler as an `onRequest` hook, so a missing or wrong key gets 401 before any MCP handling, and each request builds its own stateless server bound to the caller's tenant. A monitor that is missing or belongs to another tenant yields the same `isError` result. `get_drift` keeps probed-server text verbatim but adds an `untrustedContent` warning to its result and description, since that text is where a rug pull hides its instructions.
+
+The per-request server and transport wiring and the Fastify to web request conversion move into a new `@keelson/mcp-http` package that both the api and the demo server use, guarded by a `mcp-http-only-from-apps` dependency rule. `GET` and `DELETE` on the MCP path now answer 405 with `Allow: POST`.
+
+## eef31b9: test(e2e): prove the rug-pull path end to end and document local runs
 
 Adds the `@keelson/e2e` workspace, which starts Postgres with Testcontainers and runs the api, worker and demo server in one process on ephemeral ports with one controllable clock, then proves the headline path: a tool description rewritten on the demo server yields exactly one critical `drift` incident and one delivery whose Standard Webhooks signature verifies, and a repeated dispatch and drain delivers nothing more. The api and worker now export their builders from `package.json` so the test can use them. `HttpProbeQueue` now accepts a job and returns, as Cloud Tasks does, and reports a failed delivery to an `onDeliveryError` callback: it used to wait for the worker's probe, which locks the monitor row the dispatch still holds, so every local dispatch deadlocked until its timeout. The e2e polls the API for each probe. Also adds `docker-compose.yml` with a curl scheduler, `npm run seed` to register the five public servers without duplicates, and the README.
 

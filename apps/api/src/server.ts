@@ -9,6 +9,7 @@ import { securityHandlers } from './auth.js';
 import type { ApiCradle } from './container.js';
 import { serviceHandlers } from './handlers.js';
 import { registerInternalRoutes } from './internal-routes.js';
+import { registerKeelsonMcp } from './mcp/keelson-mcp-server.js';
 import { handleError, handleNotFound } from './problem.js';
 
 declare module '@fastify/awilix' {
@@ -52,6 +53,7 @@ export function buildApiServer(container: AwilixContainer<ApiCradle>): FastifyIn
 
   void server.register(openApiGlue, { specification, serviceHandlers, securityHandlers });
   registerInternalRoutes(server);
+  registerKeelsonMcp(server);
 
   return server;
 }

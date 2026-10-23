@@ -1,0 +1,20 @@
+{
+  "name": "@keelson/mcp-http",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@keelson/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "fastify": "^5.12.7"
+  },
+  "files": [
+    "dist"
+  ]
+}

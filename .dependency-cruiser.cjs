@@ -43,6 +43,13 @@ module.exports = {
       to: { path: '^node_modules/(awilix|@fastify/awilix)/' },
     },
     {
+      name: 'mcp-http-only-from-apps',
+      comment: 'The HTTP glue for serving MCP is a delivery concern, so the domain, application and infrastructure layers must not depend on it.',
+      severity: 'error',
+      from: { path: '^packages/(domain|application|infrastructure)/src' },
+      to: { path: '^packages/mcp-http/' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       from: {},

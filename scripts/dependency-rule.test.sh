@@ -58,3 +58,7 @@ expect_rule_violation api-no-untrusted-egress \
 expect_rule_violation di-only-in-composition-roots \
   "$repo_root/packages/application/src/__violation.ts" \
   "import 'awilix';"
+
+expect_rule_violation mcp-http-only-from-apps \
+  "$repo_root/packages/infrastructure/src/__violation.ts" \
+  "import '@keelson/mcp-http';"

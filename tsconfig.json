@@ -10,6 +10,7 @@
     { "path": "packages/domain" },
     { "path": "packages/application" },
     { "path": "packages/infrastructure" },
+    { "path": "packages/mcp-http" },
     { "path": "apps/demo-server" },
     { "path": "apps/worker" },
     { "path": "apps/api" },

@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import { registerStatelessMcpEndpoint } from '@keelson/mcp-http';
+import { McpServer } from '@modelcontextprotocol/server';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import * as z from 'zod';
 
 export interface DemoServerOptions {
@@ -34,35 +35,11 @@ function mcpServerWith(description: string): McpServer {
   return server;
 }
 
-function toWebRequest(request: FastifyRequest): Request {
-  const headers = new Headers();
-  for (const [name, value] of Object.entries(request.headers)) {
-    if (typeof value === 'string') headers.set(name, value);
-  }
-  const url = `${request.protocol}://${request.hostname}${request.url}`;
-  return new Request(url, { method: request.method, headers });
-}
-
-async function sendWebResponse(reply: FastifyReply, response: Response): Promise<FastifyReply> {
-  response.headers.forEach((value, name) => void reply.header(name, value));
-  return reply.status(response.status).send(await response.text());
-}
-
 export function buildDemoServer(options: DemoServerOptions): FastifyInstance {
   let description = options.initialDescription;
   const app = Fastify();
 
-  app.post('/mcp', async (request, reply) => {
-    const server = mcpServerWith(description);
-    const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
-    await server.connect(transport);
-    try {
-      const response = await transport.handleRequest(toWebRequest(request), { parsedBody: request.body });
-      return await sendWebResponse(reply, response);
-    } finally {
-      await server.close();
-    }
-  });
+  registerStatelessMcpEndpoint({ app, path: '/mcp', createServer: () => mcpServerWith(description) });
 
   app.put<{ Body: { description: string } }>(
     '/admin/tool-description',
