@@ -6,13 +6,28 @@ interface PublicServer {
   url: string;
 }
 
-// Public, read-only and anonymous, so no auth secret is registered with them.
+// Public, read-only and anonymous, so no auth secret is registered with them. Each answered an MCP initialize without
+// credentials when it was added (2026-10-22 for the first five, 2026-10-25 for the rest).
 const PUBLIC_SERVERS: readonly PublicServer[] = [
   { name: 'DeepWiki', url: 'https://mcp.deepwiki.com/mcp' },
   { name: 'Microsoft Learn', url: 'https://learn.microsoft.com/api/mcp' },
   { name: 'Cloudflare Docs', url: 'https://docs.mcp.cloudflare.com/mcp' },
   { name: 'Context7', url: 'https://mcp.context7.com/mcp' },
   { name: 'Hugging Face', url: 'https://huggingface.co/mcp' },
+  { name: 'Scalar Documentation', url: 'https://scalar.com/mcp' },
+  { name: 'GitMCP: scalar/scalar', url: 'https://gitmcp.io/scalar/scalar' },
+  { name: 'Model Context Protocol docs', url: 'https://modelcontextprotocol.io/mcp' },
+  { name: 'GitMCP: MCP TypeScript SDK', url: 'https://gitmcp.io/modelcontextprotocol/typescript-sdk' },
+  { name: 'AWS Knowledge', url: 'https://knowledge-mcp.global.api.aws' },
+  { name: 'Mintlify Docs', url: 'https://www.mintlify.com/docs/mcp' },
+  { name: 'Resend Docs', url: 'https://resend.com/docs/mcp' },
+  { name: 'Perplexity Docs', url: 'https://docs.perplexity.ai/mcp' },
+  { name: 'LangChain Docs', url: 'https://docs.langchain.com/mcp' },
+  { name: 'Together AI Docs', url: 'https://docs.together.ai/mcp' },
+  { name: 'Firecrawl Docs', url: 'https://docs.firecrawl.dev/mcp' },
+  { name: 'Astro Docs', url: 'https://mcp.docs.astro.build/mcp' },
+  { name: 'Svelte', url: 'https://mcp.svelte.dev/mcp' },
+  { name: 'Exa', url: 'https://mcp.exa.ai/mcp' },
 ];
 
 // Gentler than the 300 s minimum: these are other people's servers.

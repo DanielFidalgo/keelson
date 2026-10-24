@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: chore: keep local GitNexus agent files out of the repo
+## pending: chore(seed): add 14 verified public MCP servers to the seed list
+
+Adds Scalar's own documentation MCP (`https://scalar.com/mcp`), GitMCP for `scalar/scalar`, the MCP spec site and SDK, AWS Knowledge, and docs servers for Mintlify, Resend, Perplexity, LangChain, Together AI, Firecrawl, Astro and Svelte, plus Exa. Each answered an MCP initialize without credentials on 2026-10-25; servers that needed auth or redirected were left out.
+
+## a76a605: chore: keep local GitNexus agent files out of the repo
 
 `npx gitnexus analyze` writes `AGENTS.md`, `CLAUDE.md` and `.claude/skills/` into the repository root. They are local agent guidance, so they stay untracked for now.
 
