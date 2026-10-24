@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: refactor: group package sources by domain concept
+## pending: fix(infra): keep the GCP footprint at zero cost
+
+Cloud Run billed each service for its whole lifetime: with resource limits set, `cpuIdle` defaults to false, and the per-minute scheduler never let an instance go idle (about 145 dollars a month). Services now bill per request. Dispatch runs on the quarter hour and drain one minute later, so the free Neon compute can sleep in between (about 73 of 100 free CU-hours a month), and Artifact Registry keeps only the last 3 images per app to stay inside the free 0.5 GB.
+
+## 640a356: refactor: group package sources by domain concept
 
 The domain, application and infrastructure sources sat in flat folders, so a concept's code was scattered across files with nothing tying them together. They are now grouped by domain concept (monitoring, snapshots, drift, incidents, alerting, tenants and so on), with the same concept names used across the layers so the context for one concept lives in one place per layer. The application ports are split by role (repositories, unit of work, gateways, system) and the infrastructure system adapters by concern (messaging, secrets, logging, system).
 

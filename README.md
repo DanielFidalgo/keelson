@@ -28,7 +28,7 @@ The api and the demo server are the public services (the api authenticates its c
 
 ### Probe data flow
 
-1. The scheduler calls `/internal/dispatch` every minute. The api claims the monitors that are due and enqueues one job per `(monitor, slot)`, where a slot is `floor(now / interval)`, so a repeated dispatch cannot probe twice.
+1. The scheduler calls `/internal/dispatch` every 15 minutes (each quarter hour, so the free Neon compute can sleep in between; drain follows a minute later). The api claims the monitors that are due and enqueues one job per `(monitor, slot)`, where a slot is `floor(now / interval)`, so a repeated dispatch cannot probe twice.
 2. The worker runs the job: it opens an MCP session, lists tools, prompts and resources, and stores the result as a content-addressed snapshot.
 3. The domain compares the snapshot hash with the baseline. A difference opens (or escalates) the monitor's `drift` incident and writes an outbox row per active webhook endpoint, in the same transaction.
 4. The scheduler calls `/internal/outbox/drain` on the worker, which signs and sends the due rows and marks them sent.

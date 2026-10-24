@@ -50,7 +50,9 @@ function createService(config: DeployConfig, definition: ServiceDefinition): gcp
         {
           image: imageReference(config, definition.app),
           envs: definition.environment,
-          resources: { limits: { cpu: CPU_LIMIT, memory: MEMORY_LIMIT } },
+          // Request-based billing: with limits set, Cloud Run otherwise keeps CPU allocated and bills the instance's whole life,
+          // and the per-minute traffic never lets an instance go idle. All work finishes before the response, so nothing needs it.
+          resources: { cpuIdle: true, limits: { cpu: CPU_LIMIT, memory: MEMORY_LIMIT } },
         },
       ],
     },

@@ -28,7 +28,11 @@ interface EnvEntry {
 
 interface ServiceInputs {
   name: string;
-  template: { serviceAccount: string; scaling: { maxInstanceCount: number }; containers: { image: string; envs: EnvEntry[] }[] };
+  template: {
+    serviceAccount: string;
+    scaling: { maxInstanceCount: number };
+    containers: { image: string; envs: EnvEntry[]; resources: { cpuIdle?: boolean } }[];
+  };
 }
 
 let recorded: RecordedResource[] = [];
@@ -93,20 +97,20 @@ describe('Keelson infrastructure', () => {
     expect(enqueuers).toEqual([expect.objectContaining({ role: 'roles/cloudtasks.enqueuer', member: serviceAccountMember('keelson-api') })]);
   });
 
-  it('scheduler runs dispatch on api and drain on worker every minute with OIDC tokens', () => {
+  it('scheduler runs dispatch on api every 15 minutes and drain on worker one minute later, with OIDC tokens', () => {
     const jobs = ofType('gcp:cloudscheduler/job:Job').map((resource) => resource.inputs);
     const scheduler = serviceAccountEmail('keelson-scheduler', PROJECT);
 
     expect(jobs).toHaveLength(2);
     expect(jobs).toContainEqual(
       expect.objectContaining({
-        schedule: '* * * * *',
+        schedule: '0,15,30,45 * * * *',
         httpTarget: expect.objectContaining({ httpMethod: 'POST', uri: `${API_URL}/internal/dispatch`, oidcToken: { serviceAccountEmail: scheduler, audience: API_URL } }) as unknown,
       }),
     );
     expect(jobs).toContainEqual(
       expect.objectContaining({
-        schedule: '* * * * *',
+        schedule: '1,16,31,46 * * * *',
         httpTarget: expect.objectContaining({ httpMethod: 'POST', uri: `${WORKER_URL}/internal/outbox/drain`, oidcToken: { serviceAccountEmail: scheduler, audience: WORKER_URL } }) as unknown,
       }),
     );
@@ -129,6 +133,25 @@ describe('Keelson infrastructure', () => {
 
   it('runs the demo server as a single instance so every probe sees the same in-memory tool description', () => {
     expect(serviceNamed('keelson-demo-server').template.scaling.maxInstanceCount).toBe(1);
+  });
+
+  it('bills every service per request, so idle instances cost nothing', () => {
+    for (const serviceName of ['keelson-api', 'keelson-worker', 'keelson-demo-server']) {
+      const container = serviceNamed(serviceName).template.containers[0];
+      expect(container?.resources.cpuIdle).toBe(true);
+    }
+  });
+
+  it('keeps only the 3 most recent images per app, deleting older ones', () => {
+    const [registry] = ofType('gcp:artifactregistry/repository:Repository');
+
+    expect(registry?.inputs['cleanupPolicyDryRun']).toBe(false);
+    expect(registry?.inputs['cleanupPolicies']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'KEEP', mostRecentVersions: { keepCount: 3 } }),
+        expect.objectContaining({ action: 'DELETE', condition: expect.objectContaining({ tagState: 'ANY' }) as unknown }),
+      ]),
+    );
   });
 
   it('lets the api and worker scale out to 5 instances', () => {
