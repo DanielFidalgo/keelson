@@ -9,3 +9,7 @@ coverage/
 .DS_Store
 bin/
 .vitest/
+# Local agent guidance written by GitNexus; kept out of the public repo for now.
+AGENTS.md
+CLAUDE.md
+.claude/

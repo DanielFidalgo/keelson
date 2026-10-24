@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: fix(infra): keep the GCP footprint at zero cost
+## pending: chore: keep local GitNexus agent files out of the repo
+
+`npx gitnexus analyze` writes `AGENTS.md`, `CLAUDE.md` and `.claude/skills/` into the repository root. They are local agent guidance, so they stay untracked for now.
+
+## e9f2c7a: fix(infra): keep the GCP footprint at zero cost
 
 Cloud Run billed each service for its whole lifetime: with resource limits set, `cpuIdle` defaults to false, and the per-minute scheduler never let an instance go idle (about 145 dollars a month). Services now bill per request. Dispatch runs on the quarter hour and drain one minute later, so the free Neon compute can sleep in between (about 73 of 100 free CU-hours a month), and Artifact Registry keeps only the last 3 images per app to stay inside the free 0.5 GB.
 
