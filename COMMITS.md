@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: fix(infra): give the deploy's temporary stack config a yaml name
+## pending: fix(infra): run the demo server as a single instance
+
+The demo server keeps its tool description in memory. With up to 5 instances, a probe could reach an instance that still had the old text and report a false revert, or flap between drift and revert during a live demo. The demo server now runs at most one instance; api and worker keep 5.
+
+## 974997d: fix(infra): give the deploy's temporary stack config a yaml name
 
 Pulumi infers a config file's format from its extension, and `scripts/deploy.sh` copied the stack config to an extensionless `mktemp` file, so the first deploy stopped with "no marshaler found". The copy now keeps the name `Pulumi.dev.yaml` inside a temp directory. Also records the `dev` stack's encryptionsalt, which CI needs to open the stack.
 

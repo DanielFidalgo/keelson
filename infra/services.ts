@@ -11,6 +11,8 @@ const RUN_INVOKER_ROLE = 'roles/run.invoker';
 const PUBLIC_MEMBER = 'allUsers';
 // Bounds the bill if a client or a retry storm floods a service; probes are rate limited well below this anyway.
 const MAX_INSTANCES = 5;
+// The demo server keeps its tool description in memory, so a second instance would answer probes with the old text.
+const DEMO_SERVER_MAX_INSTANCES = 1;
 const MEMORY_LIMIT = '512Mi';
 const CPU_LIMIT = '1';
 
@@ -31,6 +33,7 @@ interface ServiceDefinition {
   app: ImageApp;
   runAs: string;
   environment: EnvironmentEntry[];
+  maxInstances: number;
 }
 
 function createService(config: DeployConfig, definition: ServiceDefinition): gcp.cloudrunv2.Service {
@@ -42,7 +45,7 @@ function createService(config: DeployConfig, definition: ServiceDefinition): gcp
     deletionProtection: false,
     template: {
       serviceAccount: definition.runAs,
-      scaling: { maxInstanceCount: MAX_INSTANCES },
+      scaling: { maxInstanceCount: definition.maxInstances },
       containers: [
         {
           image: imageReference(config, definition.app),
@@ -60,9 +63,15 @@ function allowInvoker(service: gcp.cloudrunv2.Service, region: string, grantName
 
 export function createServices({ config, accounts, urls }: ServiceInputs): Services {
   const environmentInputs = { config, accounts, urls };
-  const api = createService(config, { name: API_SERVICE, app: 'api', runAs: accounts.api, environment: apiEnvironment(environmentInputs) });
-  const worker = createService(config, { name: WORKER_SERVICE, app: 'worker', runAs: accounts.worker, environment: workerEnvironment(environmentInputs) });
-  const demoServer = createService(config, { name: DEMO_SERVER_SERVICE, app: 'demo-server', runAs: accounts.demoServer, environment: demoServerEnvironment() });
+  const api = createService(config, { name: API_SERVICE, app: 'api', runAs: accounts.api, environment: apiEnvironment(environmentInputs), maxInstances: MAX_INSTANCES });
+  const worker = createService(config, { name: WORKER_SERVICE, app: 'worker', runAs: accounts.worker, environment: workerEnvironment(environmentInputs), maxInstances: MAX_INSTANCES });
+  const demoServer = createService(config, {
+    name: DEMO_SERVER_SERVICE,
+    app: 'demo-server',
+    runAs: accounts.demoServer,
+    environment: demoServerEnvironment(),
+    maxInstances: DEMO_SERVER_MAX_INSTANCES,
+  });
 
   // The api authenticates callers itself with API keys, and its internal route verifies the scheduler's token.
   allowInvoker(api, config.region, 'keelson-api-public', PUBLIC_MEMBER);

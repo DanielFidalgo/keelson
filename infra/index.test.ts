@@ -28,7 +28,7 @@ interface EnvEntry {
 
 interface ServiceInputs {
   name: string;
-  template: { serviceAccount: string; containers: { image: string; envs: EnvEntry[] }[] };
+  template: { serviceAccount: string; scaling: { maxInstanceCount: number }; containers: { image: string; envs: EnvEntry[] }[] };
 }
 
 let recorded: RecordedResource[] = [];
@@ -125,6 +125,15 @@ describe('Keelson infrastructure', () => {
 
     expect(entry?.value).toBeUndefined();
     expect(entry?.valueSource?.secretKeyRef.secret).toBe('demo-admin-token');
+  });
+
+  it('runs the demo server as a single instance so every probe sees the same in-memory tool description', () => {
+    expect(serviceNamed('keelson-demo-server').template.scaling.maxInstanceCount).toBe(1);
+  });
+
+  it('lets the api and worker scale out to 5 instances', () => {
+    expect(serviceNamed('keelson-api').template.scaling.maxInstanceCount).toBe(5);
+    expect(serviceNamed('keelson-worker').template.scaling.maxInstanceCount).toBe(5);
   });
 
   it('leaves identities, secrets, custom roles and CI trust to the bootstrap stack', () => {
