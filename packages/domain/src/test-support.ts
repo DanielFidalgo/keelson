@@ -1,4 +1,4 @@
-import { DomainValidationError } from './errors.js';
+import { DomainValidationError } from './shared/errors.js';
 
 export const toolA = {
   name: 'alpha',

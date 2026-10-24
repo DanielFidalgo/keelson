@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FileSecretStore } from '../system/file-secret-store.js';
-import { SecretManagerStore } from '../gcp/secret-manager-store.js';
+import { FileSecretStore } from '../secrets/file-secret-store.js';
+import { SecretManagerStore } from '../secrets/gcp/secret-manager-store.js';
 import { OidcRequestVerifier } from '../internal-auth/oidc-verifier.js';
 import { StaticTokenVerifier } from '../internal-auth/static-token.js';
 import { createInternalRequestVerifier, createSecretStore } from './factories.js';

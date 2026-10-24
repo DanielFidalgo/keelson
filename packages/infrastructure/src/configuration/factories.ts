@@ -1,11 +1,11 @@
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import type { SecretStore } from '@keelson/application';
 import { OAuth2Client } from 'google-auth-library';
-import { SecretManagerStore } from '../gcp/secret-manager-store.js';
+import { SecretManagerStore } from '../secrets/gcp/secret-manager-store.js';
 import { OidcRequestVerifier } from '../internal-auth/oidc-verifier.js';
 import type { InternalRequestVerifier } from '../internal-auth/internal-request-verifier.js';
 import { StaticTokenVerifier } from '../internal-auth/static-token.js';
-import { FileSecretStore } from '../system/file-secret-store.js';
+import { FileSecretStore } from '../secrets/file-secret-store.js';
 import type { InternalAuthConfig, SecretStoreConfig } from './schemas.js';
 
 // Plain functions: each app's composition root wraps them in its own container, so no DI library is needed here.

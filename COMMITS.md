@@ -2,7 +2,13 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: fix(infra): run the demo server as a single instance
+## pending: refactor: group package sources by domain concept
+
+The domain, application and infrastructure sources sat in flat folders, so a concept's code was scattered across files with nothing tying them together. They are now grouped by domain concept (monitoring, snapshots, drift, incidents, alerting, tenants and so on), with the same concept names used across the layers so the context for one concept lives in one place per layer. The application ports are split by role (repositories, unit of work, gateways, system) and the infrastructure system adapters by concern (messaging, secrets, logging, system).
+
+Files only moved and their import paths changed; no behaviour changed. The names exported by each package entry point are unchanged.
+
+## f1a984d: fix(infra): run the demo server as a single instance
 
 The demo server keeps its tool description in memory. With up to 5 instances, a probe could reach an instance that still had the old text and report a false revert, or flap between drift and revert during a live demo. The demo server now runs at most one instance; api and worker keep 5.
 

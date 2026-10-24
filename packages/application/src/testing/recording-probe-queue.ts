@@ -1,4 +1,4 @@
-import type { ProbeJob, ProbeQueue } from '../ports.js';
+import type { ProbeJob, ProbeQueue } from '../ports/index.js';
 
 export class RecordingProbeQueue implements ProbeQueue {
   private readonly jobsByName = new Map<string, ProbeJob>();

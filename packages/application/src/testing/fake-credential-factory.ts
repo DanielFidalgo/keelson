@@ -1,4 +1,4 @@
-import type { CredentialFactory } from '../ports.js';
+import type { CredentialFactory } from '../ports/index.js';
 
 export class FakeCredentialFactory implements CredentialFactory {
   private counter = 0;

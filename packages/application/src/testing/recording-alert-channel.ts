@@ -1,4 +1,4 @@
-import type { AlertChannel, Delivery, DeliveryResult } from '../ports.js';
+import type { AlertChannel, Delivery, DeliveryResult } from '../ports/index.js';
 
 export class RecordingAlertChannel implements AlertChannel {
   readonly deliveries: Delivery[] = [];

@@ -1,4 +1,4 @@
-import type { IdGenerator } from '../ports.js';
+import type { IdGenerator } from '../ports/index.js';
 
 export class SequentialIds implements IdGenerator {
   private counter = 0;

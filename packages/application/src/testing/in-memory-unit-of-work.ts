@@ -1,4 +1,4 @@
-import type { Transaction, UnitOfWork } from '../ports.js';
+import type { Transaction, UnitOfWork } from '../ports/index.js';
 import {
   InMemoryApiKeys,
   InMemoryDrifts,

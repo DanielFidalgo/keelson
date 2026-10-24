@@ -1,4 +1,4 @@
-import type { SecretStore } from '../ports.js';
+import type { SecretStore } from '../ports/index.js';
 
 export class FakeSecretStore implements SecretStore {
   private readonly values = new Map<string, string>();

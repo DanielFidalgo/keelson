@@ -9,7 +9,7 @@ import type {
   WebhookEndpoint,
 } from '@keelson/domain';
 import { compareCodeUnits } from '@keelson/domain';
-import { paginate } from '../pagination.js';
+import { paginate } from '../shared/pagination.js';
 import type {
   ApiKeyRepository,
   DriftRepository,
@@ -24,7 +24,7 @@ import type {
   SnapshotStore,
   TenantRepository,
   WebhookEndpointRepository,
-} from '../ports.js';
+} from '../ports/index.js';
 
 const byId = (item: { id: string }): string => item.id;
 

@@ -1,4 +1,4 @@
-import type { Inspection, InspectionTarget, McpInspector } from '../ports.js';
+import type { Inspection, InspectionTarget, McpInspector } from '../ports/index.js';
 
 export class FakeInspector implements McpInspector {
   readonly targets: InspectionTarget[] = [];

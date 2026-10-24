@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { writeErrorLog } from '../system/structured-log.js';
+import { writeErrorLog } from '../logging/structured-log.js';
 
 export function createPool(databaseUrl: string): pg.Pool {
   const pool = new pg.Pool({ connectionString: databaseUrl });

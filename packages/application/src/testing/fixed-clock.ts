@@ -1,4 +1,4 @@
-import type { Clock } from '../ports.js';
+import type { Clock } from '../ports/index.js';
 
 export class FixedClock implements Clock {
   constructor(private readonly instant: Date) {}
