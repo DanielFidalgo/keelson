@@ -273,6 +273,50 @@ describe('useListQuery', () => {
     expect(load).toHaveBeenCalledOnce();
   });
 
+  describe('refreshAfterChange', () => {
+    const emptied = { items: [], nextCursor: null, total: 20 };
+
+    it('steps back a page when the change left the last page empty', async () => {
+      const load = vi
+        .fn<Load>()
+        .mockResolvedValueOnce({ items: ['row 20'], nextCursor: null, total: 21 })
+        .mockResolvedValueOnce(emptied)
+        .mockResolvedValue({ items: ['row 19'], nextCursor: 'c1', total: 20 });
+      const { list, query } = await mountList(load, { path: '/monitors?page=2&cursor=c1' });
+
+      await list.refreshAfterChange();
+      await flushPromises();
+
+      expect(query()).toEqual({});
+      expect(load).toHaveBeenLastCalledWith({ filters: DEFAULTS, cursor: null, limit: 20 });
+    });
+
+    it('stays on the first page when it is empty', async () => {
+      const load = vi.fn<Load>().mockResolvedValueOnce({ items: ['row 0'], nextCursor: null, total: 1 }).mockResolvedValue({ ...emptied, total: 0 });
+      const { list } = await mountList(load);
+
+      await list.refreshAfterChange();
+      await flushPromises();
+
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(list.items).toEqual([]);
+    });
+
+    it('stays put when the reload failed rather than mistaking the failure for an empty page', async () => {
+      const load = vi
+        .fn<Load>()
+        .mockResolvedValueOnce({ items: ['row 20'], nextCursor: null, total: 21 })
+        .mockRejectedValue(new Error('offline'));
+      const { list, query } = await mountList(load, { path: '/monitors?page=2&cursor=c1' });
+
+      await list.refreshAfterChange();
+      await flushPromises();
+
+      expect(query()).toEqual({ page: '2', cursor: 'c1' });
+      expect(list.error).not.toBeNull();
+    });
+  });
+
   describe('refresh timer', () => {
     const REFRESH_MS = 60_000;
 

@@ -21,6 +21,26 @@ function open() {
 }
 
 describe('ModalDialog', () => {
+  it('keeps focus inside when the backdrop is pressed, since the browser would otherwise move it to the page behind', () => {
+    const wrapper = open();
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+
+    wrapper.find('.modal-backdrop').element.dispatchEvent(press);
+
+    expect(press.defaultPrevented).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('ignores Escape and the backdrop when it is not dismissible, so only its own buttons close it', async () => {
+    const wrapper = mount(ModalDialog, { props: { title: 'Keep', dismissible: false }, slots: { default: '<input />' }, attachTo: document.body });
+
+    await wrapper.find('[role="dialog"]').trigger('keydown', { key: 'Escape' });
+    await wrapper.find('.modal-backdrop').trigger('click');
+
+    expect(wrapper.emitted('close')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('is a modal dialog named by its title', () => {
     const wrapper = open();
 

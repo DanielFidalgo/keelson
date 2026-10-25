@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue';
-import { ApiError, type Monitor } from '../api/client.js';
-import { describeFailure } from '../api/describe-failure.js';
+import type { Monitor } from '../api/client.js';
+import { describeProblems } from '../api/describe-failure.js';
 import { useApiClient } from '../injection.js';
 import { DEFAULT_INTERVAL_SECONDS } from '../intervals.js';
 import IntervalSelect from './IntervalSelect.vue';
@@ -21,12 +21,6 @@ const problems = ref<string[]>([]);
 
 const optionalAuthSecret = computed(() => (authSecret.value === '' ? {} : { authSecret: authSecret.value }));
 
-// A 400 lists every field that was wrong, so all of them are shown at once rather than one per attempt.
-function problemsOf(failure: unknown): string[] {
-  const listed = failure instanceof ApiError ? failure.problem.errors : undefined;
-  return listed !== undefined && listed.length > 0 ? listed : [describeFailure(failure)];
-}
-
 async function submit(): Promise<void> {
   if (sending.value) return;
   sending.value = true;
@@ -40,7 +34,7 @@ async function submit(): Promise<void> {
     });
     emit('created', monitor);
   } catch (failure) {
-    problems.value = problemsOf(failure);
+    problems.value = describeProblems(failure);
   } finally {
     sending.value = false;
   }

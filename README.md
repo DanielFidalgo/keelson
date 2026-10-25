@@ -60,6 +60,8 @@ This starts Postgres, runs the migrations, then starts the api (`localhost:8080`
 
 The api serves the built dashboard from `DASHBOARD_DIR` (default `apps/dashboard/dist`, which the api image already contains). Without a build it serves the API only.
 
+The dashboard has four pages: Overview (counters, open incidents, monitors that are down or drifted), Monitors (search, health filter, row actions, one page per monitor with drift, probe history, snapshot and settings), Incidents (open, acknowledged and resolved, by kind), Webhooks (add, enable, disable, delete; a signing secret is shown once, at creation, and lists and confirmations show only the scheme and host of an endpoint URL, since its path is a credential) and a link to the API reference. It asks for your API key on first use and keeps it in `sessionStorage` only, so closing the tab signs you out; the key is never put in a URL.
+
 Create a tenant. The API key is shown once:
 
 ```bash

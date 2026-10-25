@@ -92,6 +92,12 @@ export function useListQuery<Filters extends FilterValues, Item = unknown>({ def
     }
   }
 
+  // Acting on the only row of the last page leaves that page empty, and the only way on from an empty page is back.
+  async function refreshAfterChange(): Promise<void> {
+    await refresh();
+    if (items.value.length === 0 && error.value === null && page.value > FIRST_PAGE) previous();
+  }
+
   function navigate(changes: Record<string, string | null>): Promise<unknown> {
     const merged = { ...route.query, ...changes };
     const query = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== null && value !== ''));
@@ -169,5 +175,6 @@ export function useListQuery<Filters extends FilterValues, Item = unknown>({ def
     setFilter,
     setPageSize,
     refresh,
+    refreshAfterChange,
   });
 }

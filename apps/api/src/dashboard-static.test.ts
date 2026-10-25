@@ -68,7 +68,7 @@ describe('serving the dashboard', () => {
     expect(asset.body).toBe(ASSET_JS);
   });
 
-  it.each(['/monitors/mon_1', '/incidents'])('answers the dashboard route %s with index.html, so a reload works', async (path) => {
+  it.each(['/monitors', '/monitors/mon_1', '/incidents', '/webhooks'])('answers the dashboard route %s with index.html, so a reload works', async (path) => {
     const api = serverServing(builtDashboard());
 
     const response = await api.inject({ method: 'GET', url: path, headers: BROWSER_NAVIGATION });

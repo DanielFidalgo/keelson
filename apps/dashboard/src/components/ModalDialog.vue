@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, useId } from 'vue';
 
-defineProps<{ title: string }>();
+// A dialog that holds something unrecoverable sets this to false, so only its own buttons can close it.
+const props = withDefaults(defineProps<{ title: string; dismissible?: boolean }>(), { dismissible: true });
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -37,14 +38,18 @@ function keepFocusInside(event: KeyboardEvent): void {
   if (leavingBackwards || leavingForwards) event.preventDefault();
 }
 
+function dismiss(): void {
+  if (props.dismissible) emit('close');
+}
+
 function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') emit('close');
+  if (event.key === 'Escape') dismiss();
   else if (event.key === 'Tab') keepFocusInside(event);
 }
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" @mousedown.self.prevent @click.self="dismiss">
     <div ref="dialog" class="modal" role="dialog" aria-modal="true" tabindex="-1" :aria-labelledby="titleId" @keydown="handleKeydown">
       <h2 :id="titleId" class="modal-title">{{ title }}</h2>
       <div class="modal-body"><slot /></div>

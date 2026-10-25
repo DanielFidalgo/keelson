@@ -97,9 +97,7 @@ onBeforeUnmount(() => {
 });
 
 async function afterChange(): Promise<void> {
-  await Promise.all([list.refresh(), navCounts.refresh()]);
-  // Acting on the only row of the last page leaves that page empty, and the only way on from an empty page is back.
-  if (list.items.length === 0 && list.error === null && list.hasPrevious) list.previous();
+  await Promise.all([list.refreshAfterChange(), navCounts.refresh()]);
 }
 
 async function completed(message: string): Promise<void> {

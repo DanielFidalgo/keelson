@@ -2,7 +2,12 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(dashboard): add the monitor detail page with stats, drift, history, snapshot and settings
+## pending: feat(dashboard): add incidents, webhooks and overview pages
+
+Incidents now has Open, Acknowledged and Resolved tabs with counts (sent to the API as `state` and `acknowledged`) and a kind filter; resolved incidents show how they ended (Recovered, Approved or Reverted) and how long they lasted, and Acknowledge appears only on open, unacknowledged rows. Webhooks lists endpoints showing only the scheme and host of their URL, and adds, enables, disables and deletes them (behind a confirmation); the signing secret is shown once in a copyable box inside the add dialog and is kept nowhere else.
+Overview shows four counters that link to the filtered monitors, the five latest open incidents (acknowledged ones marked) and the down and drifted monitors, and reloads every minute. `useListQuery` gained `refreshAfterChange`, so actions on the last row of a page step back instead of leaving it empty, and the 400 problem list moved to `describeProblems`, shared by both Add dialogs.
+
+## 6320a80: feat(dashboard): add the monitor detail page with stats, drift, history, snapshot and settings
 
 The monitor page now has a breadcrumb, Pause or Resume and Approve new baseline (enabled only when drifted, through the same confirmation as the list), stat cards (24 h uptime, p95, interval, baseline hash) and four tabs kept in the query string: Drift as change cards, a paginated Probe history, the baseline's Snapshot, and Settings (rename, interval, replace or clear the token, delete behind a confirmation).
 Everything probed is rendered as text under a banner saying it is data, never instructions. The interval select moved out of the Add dialog so Settings shares it, and every action toasts, reloads the page and refreshes the sidebar counts.
