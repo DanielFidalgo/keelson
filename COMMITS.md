@@ -2,7 +2,15 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: chore(seed): add 14 verified public MCP servers to the seed list
+## pending: docs(plan): add the dashboard redesign plan
+
+Eight test-first tasks: the domain health rule, application read models, their Postgres queries, the API contract, then the dashboard shell and its Monitors, Monitor detail, Incidents, Webhooks and Overview pages.
+
+## 0e736ca: docs(spec): add the dashboard redesign design
+
+A dark console in Scalar's own theme with pagination, filtering, search and every API action, backed by read-only API additions (health summaries, stats, counts and totals). Includes the calls made after a builder review.
+
+## 9a846fc: chore(seed): add 14 verified public MCP servers to the seed list
 
 Adds Scalar's own documentation MCP (`https://scalar.com/mcp`), GitMCP for `scalar/scalar`, the MCP spec site and SDK, AWS Knowledge, and docs servers for Mintlify, Resend, Perplexity, LangChain, Together AI, Firecrawl, Astro and Svelte, plus Exa. Each answered an MCP initialize without credentials on 2026-10-25; servers that needed auth or redirected were left out.
 
