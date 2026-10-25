@@ -2,7 +2,7 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(dashboard): show description drift as a word-level diff
+## b6fcaf6: feat(dashboard): show description drift as a word-level diff
 
 A changed tool description used to show both full texts, which hid a one-word edit in a wall of text (a real Perplexity Docs drift on 2026-10-25 changed only a spec path and the order of a list). The drift view now diffs line by line, highlights only the words that changed, and collapses unchanged lines behind a toggle. No new dependency.
 
