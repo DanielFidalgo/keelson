@@ -1,4 +1,4 @@
-import { MAX_PAGE_LIMIT } from '@keelson/application';
+import { MAX_PAGE_LIMIT, SEARCH_MAX_LENGTH } from '@keelson/application';
 import { createSnapshot, MIN_PROBE_INTERVAL_SECONDS } from '@keelson/domain';
 import { asValue } from 'awilix';
 import type { FastifyInstance } from 'fastify';
@@ -12,6 +12,8 @@ import {
   MCP_URL,
   NOT_AN_MCP_SERVER,
   OTHER_TENANT_ID,
+  seedDownIncident,
+  seedDrift,
   seedDriftIncident,
   seedMonitor,
   seedProbeServing,
@@ -139,10 +141,10 @@ describe('monitors', () => {
       baselineHash: null,
       hasAuthSecret: false,
     });
-    expect(listed.json()).toMatchObject({ items: [{ id }], nextCursor: null });
+    expect(listed.json()).toMatchObject({ items: [{ id }], nextCursor: null, total: 1 });
     expect(foreignGet.statusCode).toBe(404);
     expect(foreignGet.headers['content-type']).toContain(PROBLEM_JSON);
-    expect(foreignList.json()).toEqual({ items: [], nextCursor: null });
+    expect(foreignList.json()).toEqual({ items: [], nextCursor: null, total: 0 });
     expect(inspector.targets).toEqual([{ url: MCP_URL, bearerToken: null }]);
   });
 
@@ -271,6 +273,7 @@ describe('probes, snapshots and baseline', () => {
     expect(response.json()).toMatchObject({
       items: [{ outcome: 'up', latencyMs: 40, serverName: 'docs', snapshotHash: snapshot.hash }],
       nextCursor: null,
+      total: 1,
     });
   });
 
@@ -402,8 +405,8 @@ describe('incidents', () => {
     const foreign = await server.inject({ method: 'GET', url: '/v1/incidents', headers: AUTHORIZED_AS_OTHER_TENANT });
 
     expect(open.json()).toMatchObject({ items: [{ id: 'inc_1', kind: 'drift', state: 'open', acknowledgedAt: null }] });
-    expect(resolved.json()).toEqual({ items: [], nextCursor: null });
-    expect(foreign.json()).toEqual({ items: [], nextCursor: null });
+    expect(resolved.json()).toEqual({ items: [], nextCursor: null, total: 0 });
+    expect(foreign.json()).toEqual({ items: [], nextCursor: null, total: 0 });
   });
 
   it('GET /v1/incidents rejects a state it does not know', async () => {
@@ -456,7 +459,7 @@ describe('webhook endpoints', () => {
       expect(response.body).not.toContain('signingSecret');
       expect(response.body).not.toContain(secrets.refs()[0]);
     }
-    expect(listed.json()).toMatchObject({ items: [{ id }], nextCursor: null });
+    expect(listed.json()).toMatchObject({ items: [{ id }], nextCursor: null, total: 1 });
   });
 
   it('a slack endpoint has no signing secret', async () => {
@@ -619,7 +622,254 @@ describe('tenant scope', () => {
     const mine = await server.inject({ method: 'GET', url: '/v1/monitors', headers: AUTHORIZED });
     const theirs = await server.inject({ method: 'GET', url: '/v1/monitors', headers: AUTHORIZED_AS_OTHER_TENANT });
 
-    expect(mine.json()).toEqual({ items: [], nextCursor: null });
+    expect(mine.json()).toEqual({ items: [], nextCursor: null, total: 0 });
     expect(theirs.json()).toMatchObject({ items: [{ id: 'mon_other' }] });
+  });
+});
+
+describe('monitor read models', () => {
+  const ids = (response: { json: () => { items: { id: string }[] } }) => response.json().items.map((item) => item.id);
+
+  it('existing clients still work: listMonitors without new parameters returns every monitor with its summary', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork, { id: 'mon_a' });
+    await seedMonitor(unitOfWork, { id: 'mon_b', name: 'Search' });
+    await seedProbeServing(unitOfWork, 'mon_a', CATALOG);
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors', headers: AUTHORIZED });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      items: [
+        { id: 'mon_b', summary: { health: 'pending', latestProbe: null, recentLatenciesMs: [], toolCount: null, openIncident: null } },
+        { id: 'mon_a', name: 'Docs', url: MCP_URL, status: 'active', hasAuthSecret: false },
+      ],
+      nextCursor: null,
+      total: 2,
+    });
+  });
+
+  it('each item carries the monitor summary: latest probe, recent latencies and open incident', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedProbeServing(unitOfWork, 'mon_1', CATALOG);
+    await seedDrift(unitOfWork, 'mon_1', 'warning');
+    await seedDriftIncident(unitOfWork, 'mon_1', 'drift_1');
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors', headers: AUTHORIZED });
+
+    expect(response.json<{ items: unknown[] }>().items[0]).toMatchObject({
+      summary: {
+        health: 'drift',
+        latestProbe: { outcome: 'up', startedAt: '2026-10-22T12:00:00.000Z', latencyMs: 40 },
+        recentLatenciesMs: [40],
+        toolCount: null,
+        openIncident: { id: 'inc_1', kind: 'drift', severity: 'warning' },
+      },
+    });
+  });
+
+  it('GET /v1/monitors?health= keeps only monitors in that health', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork, { id: 'mon_a' });
+    await seedMonitor(unitOfWork, { id: 'mon_b' });
+    await seedDriftIncident(unitOfWork, 'mon_b');
+
+    const drifted = await server.inject({ method: 'GET', url: '/v1/monitors?health=drift', headers: AUTHORIZED });
+    const down = await server.inject({ method: 'GET', url: '/v1/monitors?health=down', headers: AUTHORIZED });
+
+    expect(ids(drifted)).toEqual(['mon_b']);
+    expect(drifted.json()).toMatchObject({ total: 1 });
+    expect(down.json()).toEqual({ items: [], nextCursor: null, total: 0 });
+  });
+
+  it('GET /v1/monitors?q= matches the name or the URL, ignoring case', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork, { id: 'mon_a', name: 'Search Service' });
+    await seedMonitor(unitOfWork, { id: 'mon_b', name: 'Docs' });
+
+    const byName = await server.inject({ method: 'GET', url: '/v1/monitors?q=SEARCH', headers: AUTHORIZED });
+    const byUrl = await server.inject({ method: 'GET', url: '/v1/monitors?q=MCP.EXAMPLE', headers: AUTHORIZED });
+    const none = await server.inject({ method: 'GET', url: '/v1/monitors?q=nothing', headers: AUTHORIZED });
+
+    expect(ids(byName)).toEqual(['mon_a']);
+    expect(ids(byUrl)).toHaveLength(2);
+    expect(none.json()).toMatchObject({ items: [], total: 0 });
+  });
+
+  it('total counts every monitor the filters match, not only the page', async () => {
+    const { server, unitOfWork } = await api();
+    for (const id of ['mon_a', 'mon_b', 'mon_c']) await seedMonitor(unitOfWork, { id });
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors?limit=1', headers: AUTHORIZED });
+
+    expect(response.json<{ items: unknown[] }>().items).toHaveLength(1);
+    expect(response.json()).toMatchObject({ total: 3 });
+  });
+
+  it('GET /v1/monitors rejects a health it does not know, as problem+json', async () => {
+    const { server } = await api();
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors?health=bogus', headers: AUTHORIZED });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toContain(PROBLEM_JSON);
+  });
+
+  it('GET /v1/monitors rejects a search longer than the limit and accepts one of exactly that length', async () => {
+    const { server } = await api();
+
+    const tooLong = await server.inject({ method: 'GET', url: `/v1/monitors?q=${'a'.repeat(SEARCH_MAX_LENGTH + 1)}`, headers: AUTHORIZED });
+    const longest = await server.inject({ method: 'GET', url: `/v1/monitors?q=${'a'.repeat(SEARCH_MAX_LENGTH)}`, headers: AUTHORIZED });
+
+    expect(tooLong.statusCode).toBe(400);
+    expect(tooLong.headers['content-type']).toContain(PROBLEM_JSON);
+    expect(longest.statusCode).toBe(200);
+  });
+
+  it('GET /v1/monitors/{id} returns the same summary as a list item', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedProbeServing(unitOfWork, 'mon_1', CATALOG);
+
+    const detail = await server.inject({ method: 'GET', url: '/v1/monitors/mon_1', headers: AUTHORIZED });
+    const listed = await server.inject({ method: 'GET', url: '/v1/monitors', headers: AUTHORIZED });
+
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({ id: 'mon_1', summary: { health: 'up', latestProbe: { outcome: 'up' } } });
+    expect(detail.json()).toEqual(listed.json<{ items: unknown[] }>().items[0]);
+  });
+
+  it("another tenant's monitor stats and summary are 404", async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+
+    const summary = await server.inject({ method: 'GET', url: '/v1/monitors/mon_1', headers: AUTHORIZED_AS_OTHER_TENANT });
+    const stats = await server.inject({ method: 'GET', url: '/v1/monitors/mon_1/stats', headers: AUTHORIZED_AS_OTHER_TENANT });
+
+    for (const response of [summary, stats]) {
+      expect(response.statusCode).toBe(404);
+      expect(response.headers['content-type']).toContain(PROBLEM_JSON);
+    }
+  });
+
+  it('GET /v1/monitors/health-counts is not captured by /v1/monitors/{monitorId}', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork, { id: 'mon_a' });
+    await seedMonitor(unitOfWork, { id: 'mon_b' });
+    await seedDriftIncident(unitOfWork, 'mon_b');
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors/health-counts', headers: AUTHORIZED });
+    const foreign = await server.inject({ method: 'GET', url: '/v1/monitors/health-counts', headers: AUTHORIZED_AS_OTHER_TENANT });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ total: 2, up: 0, drift: 1, down: 0, paused: 0, pending: 1 });
+    expect(foreign.json()).toEqual({ total: 0, up: 0, drift: 0, down: 0, paused: 0, pending: 0 });
+  });
+
+  it('GET /v1/monitors/{id}/stats reports uptime and p95 over the last 24 hours', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedProbeServing(unitOfWork, 'mon_1', CATALOG);
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors/mon_1/stats', headers: AUTHORIZED });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ windowHours: 24, probes: 1, uptimeRatio: 1, p95LatencyMs: 40 });
+  });
+
+  it('GET /v1/monitors/{id}/stats has null ratios when there were no probes', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+
+    const response = await server.inject({ method: 'GET', url: '/v1/monitors/mon_1/stats', headers: AUTHORIZED });
+
+    expect(response.json()).toEqual({ windowHours: 24, probes: 0, uptimeRatio: null, p95LatencyMs: null });
+  });
+
+  it('keeps the secret reference out of the summaries', async () => {
+    const { server, inspector, secrets } = await api();
+    inspector.respondWith(UP);
+    await server.inject({ method: 'POST', url: '/v1/monitors', headers: AUTHORIZED, payload: newMonitorBody({ authSecret: 'token-1' }) });
+
+    const listed = await server.inject({ method: 'GET', url: '/v1/monitors', headers: AUTHORIZED });
+    const detail = await server.inject({ method: 'GET', url: `/v1/monitors/${listed.json<{ items: { id: string }[] }>().items[0]?.id ?? ''}`, headers: AUTHORIZED });
+
+    for (const response of [listed, detail]) {
+      expect(response.body).toContain('"hasAuthSecret":true');
+      expect(response.body).not.toContain(secrets.refs()[0]);
+      expect(response.body).not.toContain('authSecretRef');
+    }
+  });
+});
+
+describe('incident read models', () => {
+  it('GET /v1/incidents items carry the monitor name and the severity of the last drift, and a total', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedDrift(unitOfWork, 'mon_1', 'critical');
+    await seedDriftIncident(unitOfWork, 'mon_1', 'drift_1');
+    await seedDownIncident(unitOfWork, 'mon_1');
+
+    const response = await server.inject({ method: 'GET', url: '/v1/incidents', headers: AUTHORIZED });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<{ items: { id: string }[] }>().items).toHaveLength(2);
+    expect(response.json()).toMatchObject({ total: 2 });
+    expect(response.json<{ items: unknown[] }>().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'inc_1', kind: 'drift', monitorName: 'Docs', severity: 'critical' }),
+        expect.objectContaining({ id: 'inc_down', kind: 'down', monitorName: 'Docs', severity: null }),
+      ]),
+    );
+  });
+
+  it('GET /v1/incidents?kind= keeps only incidents of that kind', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedDriftIncident(unitOfWork, 'mon_1');
+    await seedDownIncident(unitOfWork, 'mon_1');
+
+    const down = await server.inject({ method: 'GET', url: '/v1/incidents?kind=down', headers: AUTHORIZED });
+
+    expect(down.json()).toMatchObject({ items: [{ id: 'inc_down' }], total: 1 });
+  });
+
+  it('GET /v1/incidents?acknowledged= separates acknowledged from unacknowledged incidents', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedDriftIncident(unitOfWork, 'mon_1');
+    await seedDownIncident(unitOfWork, 'mon_1');
+    await server.inject({ method: 'POST', url: '/v1/incidents/inc_1/acknowledge', headers: AUTHORIZED });
+
+    const acknowledged = await server.inject({ method: 'GET', url: '/v1/incidents?state=open&acknowledged=true', headers: AUTHORIZED });
+    const waiting = await server.inject({ method: 'GET', url: '/v1/incidents?state=open&acknowledged=false', headers: AUTHORIZED });
+
+    expect(acknowledged.json()).toMatchObject({ items: [{ id: 'inc_1' }], total: 1 });
+    expect(waiting.json()).toMatchObject({ items: [{ id: 'inc_down' }], total: 1 });
+  });
+
+  it.each(['kind=bogus', 'acknowledged=maybe'])('GET /v1/incidents?%s is 400 problem+json', async (query) => {
+    const { server } = await api();
+
+    const response = await server.inject({ method: 'GET', url: `/v1/incidents?${query}`, headers: AUTHORIZED });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toContain(PROBLEM_JSON);
+  });
+
+  it('GET /v1/incidents/counts counts the tenant incidents by state and kind', async () => {
+    const { server, unitOfWork } = await api();
+    await seedMonitor(unitOfWork);
+    await seedDriftIncident(unitOfWork, 'mon_1');
+    await seedDownIncident(unitOfWork, 'mon_1');
+    await server.inject({ method: 'POST', url: '/v1/incidents/inc_1/acknowledge', headers: AUTHORIZED });
+
+    const response = await server.inject({ method: 'GET', url: '/v1/incidents/counts', headers: AUTHORIZED });
+    const foreign = await server.inject({ method: 'GET', url: '/v1/incidents/counts', headers: AUTHORIZED_AS_OTHER_TENANT });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ open: 1, acknowledged: 1, resolved: 0, drift: 1, down: 1 });
+    expect(foreign.json()).toEqual({ open: 0, acknowledged: 0, resolved: 0, drift: 0, down: 0 });
   });
 });

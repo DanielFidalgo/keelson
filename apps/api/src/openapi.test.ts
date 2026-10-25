@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { SEARCH_MAX_LENGTH } from '@keelson/application';
+import { HEALTH_STATES } from '@keelson/domain';
 import { afterEach, describe, expect, it } from 'vitest';
 import { securityHandlers } from './auth.js';
 import { serviceHandlers } from './handlers.js';
@@ -9,7 +11,9 @@ const SPECIFICATION = readFileSync(new URL('../openapi.yaml', import.meta.url), 
 const EXPECTED_OPERATION_IDS = [
   'createMonitor',
   'listMonitors',
+  'getHealthCounts',
   'getMonitor',
+  'getMonitorStats',
   'updateMonitor',
   'deleteMonitor',
   'listProbes',
@@ -17,6 +21,7 @@ const EXPECTED_OPERATION_IDS = [
   'getDrift',
   'approveBaseline',
   'listIncidents',
+  'getIncidentCounts',
   'acknowledgeIncident',
   'createWebhookEndpoint',
   'listWebhookEndpoints',
@@ -62,5 +67,25 @@ describe('openapi.yaml', () => {
 
   it('describes errors as application/problem+json', () => {
     expect(SPECIFICATION).toContain('application/problem+json');
+  });
+
+  it('limits the search to the length the application accepts', () => {
+    expect(SPECIFICATION).toContain(`maxLength: ${String(SEARCH_MAX_LENGTH)}`);
+  });
+
+  it('offers exactly the health states of the domain', () => {
+    const declared = /HealthState:\n {6}type: string\n {6}enum: \[([^\]]+)\]/.exec(SPECIFICATION)?.[1]?.split(', ');
+
+    expect(declared).toEqual([...HEALTH_STATES]);
+  });
+
+  it.each([
+    ['/v1/monitors/health-counts', '/v1/monitors/{monitorId}'],
+    ['/v1/incidents/counts', '/v1/incidents/{incidentId}/acknowledge'],
+  ])('declares %s before %s so a path parameter cannot shadow it', (fixedPath, parameterisedPath) => {
+    const declaredAt = (path: string): number => SPECIFICATION.indexOf(`\n  ${path}:`);
+
+    expect(declaredAt(fixedPath)).toBeGreaterThan(-1);
+    expect(declaredAt(fixedPath)).toBeLessThan(declaredAt(parameterisedPath));
   });
 });

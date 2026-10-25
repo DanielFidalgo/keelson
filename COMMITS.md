@@ -2,7 +2,12 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat: add monitor and incident read models for the dashboard
+## pending: feat(api): expose dashboard read models: health, summaries, stats, counts and totals
+
+`GET /v1/monitors` and `GET /v1/monitors/{id}` now return each monitor with a `summary` (health, latest probe, recent latencies, tool count, open incident); the list takes `health` and `q` (at most 100 characters, a longer one is a 400) and every list response carries a `total`. New read-only operations: `GET /v1/monitors/health-counts`, `GET /v1/monitors/{id}/stats` and `GET /v1/incidents/counts`; `GET /v1/incidents` takes `kind` and `acknowledged` and returns `monitorName` and `severity` per item.
+Existing parameters and fields are unchanged, and `schema.d.ts` is regenerated from the contract. A test pins the YAML's health enum and search length to `HEALTH_STATES` and `SEARCH_MAX_LENGTH`, since the spec is read as a file and cannot import them.
+
+## 8b77001: feat: add monitor and incident read models for the dashboard
 
 `MonitorDirectory` and `IncidentDirectory` are new read-side ports with in-memory and Postgres adapters, so the dashboard can list monitor summaries (health, latest probe, recent latencies, tool count, open incident), health counts, 24 h probe stats, and incident views and counts with filters. The Postgres health is one `CASE` expression shared by listing, filtering and counting, and a parity test runs it over `HEALTH_STATE_CASES`; search escapes `%`, `_` and `\` so they match literally.
 Probe and webhook endpoint listings now return a `total` (`CountedPage`) alongside the page.

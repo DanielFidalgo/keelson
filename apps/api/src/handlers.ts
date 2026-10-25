@@ -1,24 +1,39 @@
 import {
   DEFAULT_PAGE_LIMIT,
   getCurrentDrift,
-  getMonitor as readMonitor,
+  getHealthCounts as readHealthCounts,
+  getIncidentCounts as readIncidentCounts,
+  getMonitorStats as readMonitorStats,
+  getMonitorSummary as readMonitorSummary,
   getSnapshot as readSnapshot,
   getWebhookEndpoint as readWebhookEndpoint,
-  listIncidents as readIncidents,
-  listMonitors as readMonitors,
+  listIncidentViews as readIncidentViews,
+  listMonitorSummaries as readMonitorSummaries,
   listProbes as readProbes,
   listWebhookEndpoints as readWebhookEndpoints,
   type PageRequest,
   type Transaction,
 } from '@keelson/application';
-import { parseSnapshotHash, type MonitorStatus, type WebhookEndpoint, type WebhookFormat } from '@keelson/domain';
+import {
+  parseSnapshotHash,
+  type HealthState,
+  type IncidentKind,
+  type MonitorStatus,
+  type WebhookEndpoint,
+  type WebhookFormat,
+} from '@keelson/domain';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { authenticatedTenant } from './auth.js';
 import {
+  presentCountedPage,
   presentDrift,
+  presentHealthCounts,
   presentIncident,
+  presentIncidentCounts,
+  presentIncidentView,
   presentMonitor,
-  presentPage,
+  presentMonitorStats,
+  presentMonitorSummary,
   presentProbe,
   presentSnapshot,
   presentWebhookEndpoint,
@@ -30,6 +45,17 @@ const NO_CONTENT = 204;
 interface PageQuery {
   cursor?: string;
   limit?: number;
+}
+
+interface MonitorListQuery extends PageQuery {
+  health?: HealthState;
+  q?: string;
+}
+
+interface IncidentListQuery extends PageQuery {
+  state?: 'open' | 'resolved';
+  kind?: IncidentKind;
+  acknowledged?: boolean;
 }
 
 interface MonitorParams {
@@ -90,18 +116,39 @@ export const serviceHandlers = {
     return reply.code(CREATED).send(presentMonitor(monitor));
   },
 
-  async listMonitors(request: FastifyRequest<{ Querystring: PageQuery }>) {
+  async listMonitors(request: FastifyRequest<{ Querystring: MonitorListQuery }>) {
+    const { health, q } = request.query;
     const page = await inTransaction(request, (tx) =>
-      readMonitors(tx, { tenantId: authenticatedTenant(request), page: pageOf(request.query) }),
+      readMonitorSummaries(tx, {
+        tenantId: authenticatedTenant(request),
+        filter: { health: health ?? null, search: q ?? null },
+        page: pageOf(request.query),
+      }),
     );
-    return presentPage(page, presentMonitor);
+    return presentCountedPage(page, presentMonitorSummary);
+  },
+
+  async getHealthCounts(request: FastifyRequest) {
+    const counts = await inTransaction(request, (tx) => readHealthCounts(tx, { tenantId: authenticatedTenant(request) }));
+    return presentHealthCounts(counts);
   },
 
   async getMonitor(request: FastifyRequest<{ Params: MonitorParams }>) {
-    const monitor = await inTransaction(request, (tx) =>
-      readMonitor(tx, { tenantId: authenticatedTenant(request), monitorId: request.params.monitorId }),
+    const summary = await inTransaction(request, (tx) =>
+      readMonitorSummary(tx, { tenantId: authenticatedTenant(request), monitorId: request.params.monitorId }),
     );
-    return presentMonitor(monitor);
+    return presentMonitorSummary(summary);
+  },
+
+  async getMonitorStats(request: FastifyRequest<{ Params: MonitorParams }>) {
+    const stats = await inTransaction(request, (tx) =>
+      readMonitorStats(tx, {
+        tenantId: authenticatedTenant(request),
+        monitorId: request.params.monitorId,
+        now: request.diScope.cradle.clock.now(),
+      }),
+    );
+    return presentMonitorStats(stats);
   },
 
   async updateMonitor(request: FastifyRequest<{ Params: MonitorParams; Body: UpdateMonitorBody }>) {
@@ -129,7 +176,7 @@ export const serviceHandlers = {
         page: pageOf(request.query),
       }),
     );
-    return presentPage(page, presentProbe);
+    return presentCountedPage(page, presentProbe);
   },
 
   async getSnapshot(request: FastifyRequest<{ Params: MonitorParams & { hash: string } }>) {
@@ -156,15 +203,21 @@ export const serviceHandlers = {
     return presentMonitor(monitor);
   },
 
-  async listIncidents(request: FastifyRequest<{ Querystring: PageQuery & { state?: 'open' | 'resolved' } }>) {
+  async listIncidents(request: FastifyRequest<{ Querystring: IncidentListQuery }>) {
+    const { state, kind, acknowledged } = request.query;
     const page = await inTransaction(request, (tx) =>
-      readIncidents(tx, {
+      readIncidentViews(tx, {
         tenantId: authenticatedTenant(request),
-        state: request.query.state ?? null,
+        filter: { state: state ?? null, kind: kind ?? null, acknowledged: acknowledged ?? null },
         page: pageOf(request.query),
       }),
     );
-    return presentPage(page, presentIncident);
+    return presentCountedPage(page, presentIncidentView);
+  },
+
+  async getIncidentCounts(request: FastifyRequest) {
+    const counts = await inTransaction(request, (tx) => readIncidentCounts(tx, { tenantId: authenticatedTenant(request) }));
+    return presentIncidentCounts(counts);
   },
 
   async acknowledgeIncident(request: FastifyRequest<{ Params: { incidentId: string } }>) {
@@ -190,7 +243,7 @@ export const serviceHandlers = {
     const page = await inTransaction(request, (tx) =>
       readWebhookEndpoints(tx, { tenantId: authenticatedTenant(request), page: pageOf(request.query) }),
     );
-    return presentPage(page, presentWebhookEndpoint);
+    return presentCountedPage(page, presentWebhookEndpoint);
   },
 
   async getWebhookEndpoint(request: FastifyRequest<{ Params: { endpointId: string } }>) {

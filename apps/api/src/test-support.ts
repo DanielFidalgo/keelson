@@ -1,4 +1,15 @@
-import { createSnapshot, newMonitor, openIncident, type Incident, type Monitor, type Probe, type RawCatalog, type Snapshot } from '@keelson/domain';
+import {
+  createSnapshot,
+  newMonitor,
+  openIncident,
+  type Drift,
+  type Incident,
+  type Monitor,
+  type Probe,
+  type RawCatalog,
+  type Severity,
+  type Snapshot,
+} from '@keelson/domain';
 import type { Inspection } from '@keelson/application';
 import {
   FakeCredentialFactory,
@@ -120,8 +131,21 @@ export async function seedProbeServing(unitOfWork: InMemoryUnitOfWork, monitorId
   return snapshot;
 }
 
-export async function seedDriftIncident(unitOfWork: InMemoryUnitOfWork, monitorId: string): Promise<Incident> {
-  const incident = openIncident({ id: 'inc_1', monitorId, kind: 'drift', lastDriftId: null }, NOW);
+export async function seedDriftIncident(unitOfWork: InMemoryUnitOfWork, monitorId: string, lastDriftId: string | null = null): Promise<Incident> {
+  const incident = openIncident({ id: 'inc_1', monitorId, kind: 'drift', lastDriftId }, NOW);
   await unitOfWork.transaction.incidents.save(incident);
   return incident;
+}
+
+export async function seedDownIncident(unitOfWork: InMemoryUnitOfWork, monitorId: string): Promise<Incident> {
+  const incident = openIncident({ id: 'inc_down', monitorId, kind: 'down', lastDriftId: null }, NOW);
+  await unitOfWork.transaction.incidents.save(incident);
+  return incident;
+}
+
+export async function seedDrift(unitOfWork: InMemoryUnitOfWork, monitorId: string, maxSeverity: Severity): Promise<Drift> {
+  const hash = createSnapshot(CATALOG).hash;
+  const drift: Drift = { id: 'drift_1', monitorId, fromHash: hash, toHash: hash, changes: [], maxSeverity, detectedAt: NOW };
+  await unitOfWork.transaction.drifts.insert(drift);
+  return drift;
 }

@@ -26,6 +26,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitors/health-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count your monitors by health
+         * @description Every monitor is in exactly one health, so the five counts add up to `total`.
+         */
+        get: operations["getHealthCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/monitors/{monitorId}": {
         parameters: {
             query?: never;
@@ -48,6 +68,25 @@ export interface paths {
          * @description Only the fields you send are changed. Sending a null `authSecret` removes the stored token.
          */
         patch: operations["updateMonitor"];
+        trace?: never;
+    };
+    "/v1/monitors/{monitorId}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                monitorId: components["parameters"]["MonitorId"];
+            };
+            cookie?: never;
+        };
+        /** Get a monitor's uptime and latency over the last 24 hours */
+        get: operations["getMonitorStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/monitors/{monitorId}/probes": {
@@ -151,6 +190,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/incidents/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count your incidents by state and kind
+         * @description `open` leaves out acknowledged incidents, so `open`, `acknowledged` and `resolved` never overlap.
+         *     `drift` and `down` count open incidents of that kind, acknowledged or not.
+         */
+        get: operations["getIncidentCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/incidents/{incidentId}/acknowledge": {
         parameters: {
             query?: never;
@@ -246,9 +306,57 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description Where a monitor stands, first match wins: `paused` when paused, `down` or `drift` while an incident of
+         *     that kind is open, `pending` before the first probe, otherwise `up`.
+         * @enum {string}
+         */
+        HealthState: "up" | "drift" | "down" | "paused" | "pending";
+        MonitorSummary: {
+            health: components["schemas"]["HealthState"];
+            latestProbe: {
+                /** @enum {string} */
+                outcome: "up" | "timeout" | "connection_error" | "protocol_error" | "auth_error";
+                /** Format: date-time */
+                startedAt: string;
+                latencyMs: number;
+            } | null;
+            /** @description The latency of the last 24 probes, oldest first. A failed probe is null. */
+            recentLatenciesMs: (number | null)[];
+            /** @description The number of tools in the approved baseline, or null until there is one. */
+            toolCount: number | null;
+            /** @description The open incident that sets the health. A down incident is shown over a drift one. */
+            openIncident: {
+                id: string;
+                /** @enum {string} */
+                kind: "down" | "drift";
+                /** @enum {string|null} */
+                severity: "critical" | "warning" | null;
+            } | null;
+        };
+        MonitorWithSummary: components["schemas"]["Monitor"] & {
+            summary: components["schemas"]["MonitorSummary"];
+        };
+        HealthCounts: {
+            total: number;
+            up: number;
+            drift: number;
+            down: number;
+            paused: number;
+            pending: number;
+        };
+        MonitorStats: {
+            windowHours: number;
+            probes: number;
+            /** @description The share of probes in the window that were up, 0 to 1. Null when there were none. */
+            uptimeRatio: number | null;
+            /** @description The 95th percentile latency of the probes that were up. Null when none were. */
+            p95LatencyMs: number | null;
+        };
         MonitorPage: {
-            items: components["schemas"]["Monitor"][];
+            items: components["schemas"]["MonitorWithSummary"][];
             nextCursor: string | null;
+            total: number;
         };
         CreateMonitorRequest: {
             name: string;
@@ -282,6 +390,7 @@ export interface components {
         ProbePage: {
             items: components["schemas"]["Probe"][];
             nextCursor: string | null;
+            total: number;
         };
         Snapshot: {
             hash: string;
@@ -350,9 +459,25 @@ export interface components {
             acknowledgedAt: string | null;
             lastDriftId: string | null;
         };
+        IncidentView: components["schemas"]["Incident"] & {
+            monitorName: string;
+            /**
+             * @description The highest severity of the last drift. Null for a down incident.
+             * @enum {string|null}
+             */
+            severity: "critical" | "warning" | null;
+        };
+        IncidentCounts: {
+            open: number;
+            acknowledged: number;
+            resolved: number;
+            drift: number;
+            down: number;
+        };
         IncidentPage: {
-            items: components["schemas"]["Incident"][];
+            items: components["schemas"]["IncidentView"][];
             nextCursor: string | null;
+            total: number;
         };
         WebhookEndpoint: {
             id: string;
@@ -372,6 +497,7 @@ export interface components {
         WebhookEndpointPage: {
             items: components["schemas"]["WebhookEndpoint"][];
             nextCursor: string | null;
+            total: number;
         };
         CreateWebhookEndpointRequest: {
             url: string;
@@ -430,6 +556,10 @@ export interface operations {
     listMonitors: {
         parameters: {
             query?: {
+                /** @description Only monitors in this health. */
+                health?: components["schemas"]["HealthState"];
+                /** @description Only monitors whose name or URL contains this text, ignoring case. */
+                q?: string;
                 /** @description The `nextCursor` of the previous page. */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description How many items to return at most. Defaults to 50. */
@@ -480,6 +610,27 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    getHealthCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthCounts"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getMonitor: {
         parameters: {
             query?: never;
@@ -491,13 +642,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The monitor. */
+            /** @description The monitor, with the same summary a list item has. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Monitor"];
+                    "application/json": components["schemas"]["MonitorWithSummary"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -551,6 +702,30 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getMonitorStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                monitorId: components["parameters"]["MonitorId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorStats"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -670,6 +845,10 @@ export interface operations {
             query?: {
                 /** @description Only incidents in this state. */
                 state?: "open" | "resolved";
+                /** @description Only incidents of this kind. */
+                kind?: "drift" | "down";
+                /** @description Only incidents that have (`true`) or have not (`false`) been acknowledged. */
+                acknowledged?: boolean;
                 /** @description The `nextCursor` of the previous page. */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description How many items to return at most. Defaults to 50. */
@@ -691,6 +870,27 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getIncidentCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentCounts"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
         };
     };

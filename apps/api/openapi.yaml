@@ -7,8 +7,9 @@ info:
     baseline you approved, and alerts you when the catalog drifts or the server goes down.
 
     Every request needs an API key in an `Authorization: Bearer <key>` header. Errors are returned as
-    `application/problem+json`. List endpoints take `?cursor=&limit=` and return `{ items, nextCursor }`;
-    pass `nextCursor` back as `cursor` to read the next page.
+    `application/problem+json`. List endpoints take `?cursor=&limit=` and return `{ items, nextCursor, total }`;
+    pass `nextCursor` back as `cursor` to read the next page. `total` counts every item the request's filters
+    match, not just the ones on the page.
 tags:
   - name: Monitors
   - name: Incidents
@@ -46,6 +47,19 @@ paths:
       tags: [Monitors]
       summary: List your monitors, newest first
       parameters:
+        - name: health
+          in: query
+          required: false
+          description: Only monitors in this health.
+          schema:
+            $ref: '#/components/schemas/HealthState'
+        - name: q
+          in: query
+          required: false
+          description: Only monitors whose name or URL contains this text, ignoring case.
+          schema:
+            type: string
+            maxLength: 100
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -59,6 +73,21 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /v1/monitors/health-counts:
+    get:
+      operationId: getHealthCounts
+      tags: [Monitors]
+      summary: Count your monitors by health
+      description: Every monitor is in exactly one health, so the five counts add up to `total`.
+      responses:
+        '200':
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCounts'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/monitors/{monitorId}:
     parameters:
       - $ref: '#/components/parameters/MonitorId'
@@ -68,11 +97,11 @@ paths:
       summary: Get a monitor
       responses:
         '200':
-          description: The monitor.
+          description: The monitor, with the same summary a list item has.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Monitor'
+                $ref: '#/components/schemas/MonitorWithSummary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -108,6 +137,24 @@ paths:
       responses:
         '204':
           description: The monitor was deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/monitors/{monitorId}/stats:
+    parameters:
+      - $ref: '#/components/parameters/MonitorId'
+    get:
+      operationId: getMonitorStats
+      tags: [Monitors]
+      summary: Get a monitor's uptime and latency over the last 24 hours
+      responses:
+        '200':
+          description: The statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorStats'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -220,6 +267,19 @@ paths:
           schema:
             type: string
             enum: [open, resolved]
+        - name: kind
+          in: query
+          required: false
+          description: Only incidents of this kind.
+          schema:
+            type: string
+            enum: [drift, down]
+        - name: acknowledged
+          in: query
+          required: false
+          description: Only incidents that have (`true`) or have not (`false`) been acknowledged.
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -231,6 +291,23 @@ paths:
                 $ref: '#/components/schemas/IncidentPage'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/incidents/counts:
+    get:
+      operationId: getIncidentCounts
+      tags: [Incidents]
+      summary: Count your incidents by state and kind
+      description: |
+        `open` leaves out acknowledged incidents, so `open`, `acknowledged` and `resolved` never overlap.
+        `drift` and `down` count open incidents of that kind, acknowledged or not.
+      responses:
+        '200':
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentCounts'
         '401':
           $ref: '#/components/responses/Unauthorized'
   /v1/incidents/{incidentId}/acknowledge:
@@ -467,16 +544,102 @@ components:
         createdAt:
           type: string
           format: date-time
+    HealthState:
+      type: string
+      enum: [up, drift, down, paused, pending]
+      description: |
+        Where a monitor stands, first match wins: `paused` when paused, `down` or `drift` while an incident of
+        that kind is open, `pending` before the first probe, otherwise `up`.
+    MonitorSummary:
+      type: object
+      required: [health, latestProbe, recentLatenciesMs, toolCount, openIncident]
+      properties:
+        health:
+          $ref: '#/components/schemas/HealthState'
+        latestProbe:
+          type: [object, 'null']
+          required: [outcome, startedAt, latencyMs]
+          properties:
+            outcome:
+              type: string
+              enum: [up, timeout, connection_error, protocol_error, auth_error]
+            startedAt:
+              type: string
+              format: date-time
+            latencyMs:
+              type: integer
+        recentLatenciesMs:
+          type: array
+          description: The latency of the last 24 probes, oldest first. A failed probe is null.
+          items:
+            type: [integer, 'null']
+        toolCount:
+          type: [integer, 'null']
+          description: The number of tools in the approved baseline, or null until there is one.
+        openIncident:
+          type: [object, 'null']
+          description: The open incident that sets the health. A down incident is shown over a drift one.
+          required: [id, kind, severity]
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum: [down, drift]
+            severity:
+              type: [string, 'null']
+              enum: [critical, warning, null]
+    MonitorWithSummary:
+      allOf:
+        - $ref: '#/components/schemas/Monitor'
+        - type: object
+          required: [summary]
+          properties:
+            summary:
+              $ref: '#/components/schemas/MonitorSummary'
+    HealthCounts:
+      type: object
+      required: [total, up, drift, down, paused, pending]
+      properties:
+        total:
+          type: integer
+        up:
+          type: integer
+        drift:
+          type: integer
+        down:
+          type: integer
+        paused:
+          type: integer
+        pending:
+          type: integer
+    MonitorStats:
+      type: object
+      required: [windowHours, probes, uptimeRatio, p95LatencyMs]
+      properties:
+        windowHours:
+          type: integer
+        probes:
+          type: integer
+        uptimeRatio:
+          type: [number, 'null']
+          description: The share of probes in the window that were up, 0 to 1. Null when there were none.
+        p95LatencyMs:
+          type: [integer, 'null']
+          description: The 95th percentile latency of the probes that were up. Null when none were.
     MonitorPage:
       type: object
-      required: [items, nextCursor]
+      required: [items, nextCursor, total]
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Monitor'
+            $ref: '#/components/schemas/MonitorWithSummary'
         nextCursor:
           type: [string, 'null']
+        total:
+          type: integer
+          minimum: 0
     CreateMonitorRequest:
       type: object
       additionalProperties: false
@@ -541,7 +704,7 @@ components:
           type: [string, 'null']
     ProbePage:
       type: object
-      required: [items, nextCursor]
+      required: [items, nextCursor, total]
       properties:
         items:
           type: array
@@ -549,6 +712,9 @@ components:
             $ref: '#/components/schemas/Probe'
         nextCursor:
           type: [string, 'null']
+        total:
+          type: integer
+          minimum: 0
     Snapshot:
       type: object
       required: [hash, catalog]
@@ -689,16 +855,45 @@ components:
           format: date-time
         lastDriftId:
           type: [string, 'null']
+    IncidentView:
+      allOf:
+        - $ref: '#/components/schemas/Incident'
+        - type: object
+          required: [monitorName, severity]
+          properties:
+            monitorName:
+              type: string
+            severity:
+              type: [string, 'null']
+              enum: [critical, warning, null]
+              description: The highest severity of the last drift. Null for a down incident.
+    IncidentCounts:
+      type: object
+      required: [open, acknowledged, resolved, drift, down]
+      properties:
+        open:
+          type: integer
+        acknowledged:
+          type: integer
+        resolved:
+          type: integer
+        drift:
+          type: integer
+        down:
+          type: integer
     IncidentPage:
       type: object
-      required: [items, nextCursor]
+      required: [items, nextCursor, total]
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Incident'
+            $ref: '#/components/schemas/IncidentView'
         nextCursor:
           type: [string, 'null']
+        total:
+          type: integer
+          minimum: 0
     WebhookEndpoint:
       type: object
       required: [id, url, format, status, consecutiveFailures, createdAt]
@@ -729,7 +924,7 @@ components:
               description: Shown once. Null for the `slack` format, which is not signed.
     WebhookEndpointPage:
       type: object
-      required: [items, nextCursor]
+      required: [items, nextCursor, total]
       properties:
         items:
           type: array
@@ -737,6 +932,9 @@ components:
             $ref: '#/components/schemas/WebhookEndpoint'
         nextCursor:
           type: [string, 'null']
+        total:
+          type: integer
+          minimum: 0
     CreateWebhookEndpointRequest:
       type: object
       additionalProperties: false
