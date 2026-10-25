@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: fix(dashboard): keep views fresh and consistent before the walkthrough
+## pending: feat(dashboard): show description drift as a word-level diff
+
+A changed tool description used to show both full texts, which hid a one-word edit in a wall of text (a real Perplexity Docs drift on 2026-10-25 changed only a spec path and the order of a list). The drift view now diffs line by line, highlights only the words that changed, and collapses unchanged lines behind a toggle. No new dependency.
+
+## 8b59ef1: fix(dashboard): keep views fresh and consistent before the walkthrough
 
 The monitor page now reloads every minute like the history table beside it and has a Refresh button, and a failed refresh keeps the data under an error banner; lists do the same instead of emptying, showing the full error only when nothing had loaded. The row menu focuses its first item without scrolling, so opening it can no longer close it.
 Display labels moved to one module and acknowledged incidents read the same on Overview and Incidents. The run, toast, refresh and nav-count sequence became `useAction`, which also disables the buttons while an action runs (no more double Disable or Delete on Webhooks), and the unused `change` and `busy` left `useLoadedData`.

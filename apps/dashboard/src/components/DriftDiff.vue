@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import type { Change } from '../api/client.js';
+import { diffText, type DiffBlock, type DiffLine, type DiffSegment } from '../text-diff.js';
 
 defineProps<{ changes: Change[] }>();
 
@@ -37,6 +39,25 @@ function targetKindOf(change: Change): TargetKind {
 function subjectOf(change: Change): string {
   return change.name ?? change.uri ?? change.tool ?? '';
 }
+
+function blocksOf(change: Change): DiffBlock[] {
+  return diffText(change.before ?? '', change.after ?? '');
+}
+
+const expanded = ref(new Set<string>());
+const blockKey = (changeIndex: number, blockIndex: number): string => [changeIndex, blockIndex].join(':');
+const isExpanded = (changeIndex: number, blockIndex: number): boolean => expanded.value.has(blockKey(changeIndex, blockIndex));
+
+function expand(changeIndex: number, blockIndex: number): void {
+  expanded.value = new Set([...expanded.value, blockKey(changeIndex, blockIndex)]);
+}
+
+const LINE_CLASSES: Record<DiffLine['kind'], string> = { same: '', added: 'is-added', removed: 'is-removed', changed: 'is-changed' };
+const WORD_CLASSES: Record<DiffSegment['kind'], string> = { same: '', added: 'word-added', removed: 'word-removed' };
+
+function unchangedLabel(count: number): string {
+  return [String(count), 'unchanged', count === 1 ? 'line' : 'lines'].join(' ');
+}
 </script>
 
 <template>
@@ -51,8 +72,29 @@ function subjectOf(change: Change): string {
         <span class="target mono muted">{{ targetKindOf(change) }} · {{ subjectOf(change) }}</span>
       </div>
       <div v-if="change.kind === 'description_changed'" class="diff mono">
-        <span class="diff-line is-removed">- {{ change.before }}</span>
-        <span class="diff-line is-added">+ {{ change.after }}</span>
+        <template v-for="(block, blockIndex) in blocksOf(change)" :key="blockIndex">
+          <button
+            v-if="block.kind === 'collapsed' && !isExpanded(index, blockIndex)"
+            type="button"
+            class="unchanged-toggle"
+            @click="expand(index, blockIndex)"
+          >
+            &#8943; {{ unchangedLabel(block.lines.length) }}
+          </button>
+          <template v-else-if="block.kind === 'collapsed'">
+            <span v-for="(text, lineIndex) in block.lines" :key="lineIndex" class="diff-line">{{ text }}</span>
+          </template>
+          <template v-else>
+            <span v-for="(line, lineIndex) in block.lines" :key="lineIndex" class="diff-line" :class="LINE_CLASSES[line.kind]">
+              <template v-if="line.kind === 'changed'">
+                <span v-for="(segment, segmentIndex) in line.segments" :key="segmentIndex" :class="WORD_CLASSES[segment.kind]">{{
+                  segment.text
+                }}</span>
+              </template>
+              <template v-else>{{ line.text }}</template>
+            </span>
+          </template>
+        </template>
       </div>
     </li>
   </ul>
@@ -67,10 +109,19 @@ function subjectOf(change: Change): string {
 }
 
 .diff-line {
-  padding: 0 6px;
+  min-height: 1.6em;
+  padding: 0 6px 0 18px;
+  position: relative;
   border-radius: var(--radius-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* The gutter marks a line's role, the way a code review diff does. */
+.diff-line::before {
+  position: absolute;
+  left: 6px;
+  color: var(--scalar-color-3);
 }
 
 .is-removed {
@@ -78,8 +129,48 @@ function subjectOf(change: Change): string {
   color: var(--diff-removed-color);
 }
 
+.is-removed::before {
+  content: '-';
+}
+
 .is-added {
   background: var(--diff-added-background);
   color: var(--diff-added-color);
+}
+
+.is-added::before {
+  content: '+';
+}
+
+.is-changed::before {
+  content: '~';
+}
+
+.word-removed {
+  background: var(--diff-removed-background);
+  color: var(--diff-removed-color);
+  text-decoration: line-through;
+  border-radius: var(--radius-sm);
+}
+
+.word-added {
+  background: var(--diff-added-background);
+  color: var(--diff-added-color);
+  border-radius: var(--radius-sm);
+}
+
+.unchanged-toggle {
+  justify-self: start;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--scalar-background-2);
+  color: var(--scalar-color-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.unchanged-toggle:hover {
+  color: var(--scalar-color-1);
 }
 </style>
