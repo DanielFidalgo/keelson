@@ -1,7 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { Probe } from '../api/client.js';
-import { MONITOR, mountPageAt, stubClient } from '../test-support.js';
+import { MONITOR, mountPageAt, pageOf, stubClient } from '../test-support.js';
 
 const FROM_HASH = 'b'.repeat(64);
 const TO_HASH = 'c'.repeat(64);
@@ -30,7 +30,7 @@ const PROBE: Probe = {
 
 describe('MonitorPage', () => {
   it('shows the monitor, its probe history and the current drift', async () => {
-    const client = stubClient({ getDrift: vi.fn(() => Promise.resolve(DRIFT)), listProbes: vi.fn(() => Promise.resolve([PROBE])) });
+    const client = stubClient({ getDrift: vi.fn(() => Promise.resolve(DRIFT)), listProbes: vi.fn(() => Promise.resolve(pageOf([PROBE]))) });
 
     const wrapper = await mountPageAt(`/monitors/${MONITOR.id}`, client);
 
@@ -61,7 +61,7 @@ describe('MonitorPage', () => {
 
   it('renders probe error details and server names as text', async () => {
     const hostile = { ...PROBE, outcome: 'protocol_error' as const, errorDetail: '<img src=x onerror=alert(1)>', serverName: '<b>docs</b>' };
-    const client = stubClient({ listProbes: vi.fn(() => Promise.resolve([hostile])) });
+    const client = stubClient({ listProbes: vi.fn(() => Promise.resolve(pageOf([hostile]))) });
 
     const wrapper = await mountPageAt(`/monitors/${MONITOR.id}`, client);
 

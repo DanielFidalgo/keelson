@@ -1,40 +1,57 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
-import { formatTime } from '../format.js';
+import DataList from '../components/DataList.vue';
+import LatencySparkline from '../components/LatencySparkline.vue';
+import ListPagination from '../components/ListPagination.vue';
+import PageHeader from '../components/PageHeader.vue';
+import RelativeTime from '../components/RelativeTime.vue';
+import StatusPill from '../components/StatusPill.vue';
+import type { MonitorSummary } from '../api/client.js';
+import { PAGE_SIZES, useListQuery } from '../composables/useListQuery.js';
 import { useApiClient } from '../injection.js';
-import { useLoadedData } from '../composables/useLoadedData.js';
+
+const COLUMNS = ['Monitor', 'Status', 'Latency', 'Tools', 'Last probe'];
 
 const client = useApiClient();
-const { data: monitors, errorMessage } = useLoadedData(() => client.listMonitors());
+const list = useListQuery({ defaults: {}, pageSizes: PAGE_SIZES, load: ({ cursor, limit }) => client.listMonitors({ cursor, limit }) });
+
+function latestLatency({ latestProbe }: MonitorSummary): string {
+  if (latestProbe === null) return '';
+  return latestProbe.outcome === 'up' ? `${String(latestProbe.latencyMs)} ms` : latestProbe.outcome.replace('_', ' ');
+}
 </script>
 
 <template>
-  <h1>Monitors</h1>
-  <p v-if="errorMessage !== null" role="alert" class="error">{{ errorMessage }}</p>
-  <p v-else-if="monitors === null">Loading...</p>
-  <p v-else-if="monitors.length === 0">No monitors yet.</p>
-  <table v-else>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>URL</th>
-        <th>Status</th>
-        <th>Baseline</th>
-        <th>Failures in a row</th>
-        <th>Next probe</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="monitor in monitors" :key="monitor.id">
-        <td>
-          <RouterLink :to="{ name: 'monitor', params: { id: monitor.id } }">{{ monitor.name }}</RouterLink>
-        </td>
-        <td>{{ monitor.url }}</td>
-        <td>{{ monitor.status }}</td>
-        <td>{{ monitor.baselineHash === null ? 'Awaiting first probe' : 'Approved' }}</td>
-        <td>{{ monitor.consecutiveFailures }}</td>
-        <td>{{ formatTime(monitor.nextProbeAt) }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <PageHeader title="Monitors" />
+  <DataList :columns="COLUMNS" :loading="list.loading" :error="list.error" :is-empty="list.items.length === 0" empty-title="No monitors yet" @retry="list.refresh()">
+    <tr v-for="monitor in list.items" :key="monitor.id">
+      <td>
+        <RouterLink class="cell-primary" :to="{ name: 'monitor', params: { id: monitor.id } }">{{ monitor.name }}</RouterLink>
+        <div class="mono muted">{{ monitor.url }}</div>
+      </td>
+      <td><StatusPill :health="monitor.summary.health" :severity="monitor.summary.openIncident?.severity ?? null" /></td>
+      <td>
+        <LatencySparkline :values="monitor.summary.recentLatenciesMs" />
+        <span class="latency-value mono muted">{{ latestLatency(monitor.summary) }}</span>
+      </td>
+      <td>{{ monitor.summary.toolCount ?? '' }}</td>
+      <td class="text-secondary"><RelativeTime v-if="monitor.summary.latestProbe !== null" :timestamp="monitor.summary.latestProbe.startedAt" /></td>
+    </tr>
+  </DataList>
+  <ListPagination
+    :range-label="list.rangeLabel"
+    :page-size="list.pageSize"
+    :page-sizes="PAGE_SIZES"
+    :has-previous="list.hasPrevious"
+    :has-next="list.hasNext"
+    @previous="list.previous()"
+    @next="list.next()"
+    @update:page-size="list.setPageSize($event)"
+  />
 </template>
+
+<style scoped>
+.latency-value {
+  margin-left: var(--space-2);
+}
+</style>

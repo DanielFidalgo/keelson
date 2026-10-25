@@ -1,47 +1,61 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { RouterLink } from 'vue-router';
-import { useLoadedData } from '../composables/useLoadedData.js';
-import { formatTime } from '../format.js';
+import DataList from '../components/DataList.vue';
+import ListPagination from '../components/ListPagination.vue';
+import PageHeader from '../components/PageHeader.vue';
+import RelativeTime from '../components/RelativeTime.vue';
+import StatusPill from '../components/StatusPill.vue';
+import { PAGE_SIZES, useListQuery } from '../composables/useListQuery.js';
+import { useNavCounts } from '../composables/useNavCounts.js';
+import { useToasts } from '../composables/useToasts.js';
 import { useApiClient } from '../injection.js';
 
-const client = useApiClient();
-const { data, errorMessage, busy, change } = useLoadedData(async () => {
-  const [incidents, monitors] = await Promise.all([client.listOpenIncidents(), client.listMonitors()]);
-  const monitorNames = new Map(monitors.map(({ id, name }) => [id, name]));
-  return incidents.map((incident) => ({ incident, monitorName: monitorNames.get(incident.monitorId) ?? incident.monitorId }));
-});
+const COLUMNS = ['Monitor', 'Kind', 'Opened', 'Acknowledgement'];
 
-function acknowledge(incidentId: string): Promise<void> {
-  return change(() => client.acknowledgeIncident(incidentId));
+const client = useApiClient();
+const toasts = useToasts();
+const navCounts = useNavCounts();
+const list = useListQuery({ defaults: {}, pageSizes: PAGE_SIZES, load: ({ cursor, limit }) => client.listIncidents({ state: 'open', cursor, limit }) });
+const acknowledging = ref(false);
+
+async function acknowledge(incidentId: string): Promise<void> {
+  acknowledging.value = true;
+  try {
+    await client.acknowledgeIncident(incidentId);
+    toasts.success('Incident acknowledged');
+    await Promise.all([list.refresh(), navCounts.refresh()]);
+  } catch (error) {
+    toasts.failure(error);
+  } finally {
+    acknowledging.value = false;
+  }
 }
 </script>
 
 <template>
-  <h1>Open incidents</h1>
-  <p v-if="errorMessage !== null" role="alert" class="error">{{ errorMessage }}</p>
-  <p v-else-if="data === null">Loading...</p>
-  <p v-else-if="data.length === 0">No open incidents.</p>
-  <table v-else>
-    <thead>
-      <tr>
-        <th>Monitor</th>
-        <th>Kind</th>
-        <th>Opened</th>
-        <th>Acknowledgement</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="{ incident, monitorName } in data" :key="incident.id">
-        <td>
-          <RouterLink :to="{ name: 'monitor', params: { id: incident.monitorId } }">{{ monitorName }}</RouterLink>
-        </td>
-        <td>{{ incident.kind }}</td>
-        <td>{{ formatTime(incident.openedAt) }}</td>
-        <td>
-          <template v-if="incident.acknowledgedAt !== null">Acknowledged {{ formatTime(incident.acknowledgedAt) }}</template>
-          <button v-else type="button" data-action="acknowledge" :disabled="busy" @click="acknowledge(incident.id)">Acknowledge</button>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+  <PageHeader title="Incidents" />
+  <DataList :columns="COLUMNS" :loading="list.loading" :error="list.error" :is-empty="list.items.length === 0" empty-title="No open incidents" @retry="list.refresh()">
+    <tr v-for="incident in list.items" :key="incident.id">
+      <td>
+        <RouterLink class="cell-primary" :to="{ name: 'monitor', params: { id: incident.monitorId } }">{{ incident.monitorName }}</RouterLink>
+      </td>
+      <td><StatusPill :health="incident.kind" :severity="incident.severity" /></td>
+      <td class="text-secondary"><RelativeTime :timestamp="incident.openedAt" /></td>
+      <td>
+        <template v-if="incident.acknowledgedAt !== null">Acknowledged <RelativeTime :timestamp="incident.acknowledgedAt" /></template>
+        <button v-else type="button" class="btn btn-small" data-action="acknowledge" :disabled="acknowledging" @click="acknowledge(incident.id)">Acknowledge</button>
+      </td>
+    </tr>
+  </DataList>
+  <ListPagination
+    :range-label="list.rangeLabel"
+    :page-size="list.pageSize"
+    :page-sizes="PAGE_SIZES"
+    :has-previous="list.hasPrevious"
+    :has-next="list.hasNext"
+    @previous="list.previous()"
+    @next="list.next()"
+    @update:page-size="list.setPageSize($event)"
+  />
 </template>

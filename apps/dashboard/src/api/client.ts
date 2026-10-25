@@ -1,20 +1,41 @@
-import type { components } from './schema.js';
+import type { components, operations } from './schema.js';
 
 // Every shape the dashboard reads comes from openapi.yaml through the generated schema, so the API cannot drift from it unnoticed.
 type Schemas = components['schemas'];
 export type Monitor = Schemas['Monitor'];
+export type MonitorSummary = Schemas['MonitorSummary'];
+export type MonitorWithSummary = Schemas['MonitorWithSummary'];
+export type MonitorPage = Schemas['MonitorPage'];
+export type HealthState = Schemas['HealthState'];
+export type HealthCounts = Schemas['HealthCounts'];
+export type MonitorStats = Schemas['MonitorStats'];
+export type CreateMonitorRequest = Schemas['CreateMonitorRequest'];
+export type UpdateMonitorRequest = Schemas['UpdateMonitorRequest'];
 export type Probe = Schemas['Probe'];
-export type Incident = Schemas['Incident'];
+export type ProbePage = Schemas['ProbePage'];
+export type Snapshot = Schemas['Snapshot'];
 export type Change = Schemas['Change'];
 export type CurrentDrift = Schemas['CurrentDrift'];
+export type Incident = Schemas['Incident'];
+export type IncidentView = Schemas['IncidentView'];
+export type IncidentPage = Schemas['IncidentPage'];
+export type IncidentCounts = Schemas['IncidentCounts'];
+export type WebhookEndpoint = Schemas['WebhookEndpoint'];
+export type CreatedWebhookEndpoint = Schemas['CreatedWebhookEndpoint'];
+export type WebhookEndpointPage = Schemas['WebhookEndpointPage'];
+export type CreateWebhookEndpointRequest = Schemas['CreateWebhookEndpointRequest'];
+export type UpdateWebhookEndpointRequest = Schemas['UpdateWebhookEndpointRequest'];
 export type Problem = Schemas['Problem'];
 
-interface Page<Item> {
-  items: Item[];
-  nextCursor: string | null;
-}
+// A filter the page has not set arrives as null (or empty, for search) and is left out of the request.
+type ListParams<Operation extends keyof operations> = { [Name in keyof NonNullable<operations[Operation]['parameters']['query']>]?: NonNullable<operations[Operation]['parameters']['query']>[Name] | null };
+export type MonitorListParams = ListParams<'listMonitors'>;
+export type IncidentListParams = ListParams<'listIncidents'>;
+export type ProbeListParams = ListParams<'listProbes'>;
+export type WebhookEndpointListParams = ListParams<'listWebhookEndpoints'>;
 
 const UNAUTHORIZED = 401;
+const NO_CONTENT = 204;
 const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
 export class ApiError extends Error {
@@ -49,20 +70,43 @@ export interface ApiClientOptions {
   fetch?: typeof fetch;
 }
 
+type QueryValue = string | number | boolean | null | undefined;
+
 interface Request {
-  method?: 'GET' | 'POST';
-  query?: Record<string, string>;
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  query?: Record<string, QueryValue>;
   body?: unknown;
 }
 
 export interface ApiClient {
-  listMonitors(): Promise<Monitor[]>;
-  getMonitor(monitorId: string): Promise<Monitor>;
-  listProbes(monitorId: string): Promise<Probe[]>;
+  listMonitors(params: MonitorListParams): Promise<MonitorPage>;
+  getMonitor(monitorId: string): Promise<MonitorWithSummary>;
+  createMonitor(request: CreateMonitorRequest): Promise<Monitor>;
+  updateMonitor(monitorId: string, request: UpdateMonitorRequest): Promise<Monitor>;
+  deleteMonitor(monitorId: string): Promise<void>;
+  getHealthCounts(): Promise<HealthCounts>;
+  getMonitorStats(monitorId: string): Promise<MonitorStats>;
+  listProbes(monitorId: string, params: ProbeListParams): Promise<ProbePage>;
+  getSnapshot(monitorId: string, hash: string): Promise<Snapshot>;
   getDrift(monitorId: string): Promise<CurrentDrift>;
   approveBaseline(monitorId: string, snapshotHash: string): Promise<Monitor>;
-  listOpenIncidents(): Promise<Incident[]>;
+  listIncidents(params: IncidentListParams): Promise<IncidentPage>;
+  getIncidentCounts(): Promise<IncidentCounts>;
   acknowledgeIncident(incidentId: string): Promise<Incident>;
+  listWebhookEndpoints(params: WebhookEndpointListParams): Promise<WebhookEndpointPage>;
+  getWebhookEndpoint(endpointId: string): Promise<WebhookEndpoint>;
+  createWebhookEndpoint(request: CreateWebhookEndpointRequest): Promise<CreatedWebhookEndpoint>;
+  updateWebhookEndpoint(endpointId: string, request: UpdateWebhookEndpointRequest): Promise<WebhookEndpoint>;
+  deleteWebhookEndpoint(endpointId: string): Promise<void>;
+}
+
+function queryStringOf(query: Record<string, QueryValue>): string {
+  const parameters = new URLSearchParams();
+  for (const [name, value] of Object.entries(query)) {
+    if (value === null || value === undefined || value === '') continue;
+    parameters.set(name, String(value));
+  }
+  return parameters.toString();
 }
 
 export function createApiClient({ apiKey, onUnauthorized, fetch: send = (...args) => fetch(...args) }: ApiClientOptions): ApiClient {
@@ -70,7 +114,7 @@ export function createApiClient({ apiKey, onUnauthorized, fetch: send = (...args
     const key = apiKey();
     if (key === null) throw new ApiError(problemFor(UNAUTHORIZED, 'An API key is required.'));
 
-    const queryString = new URLSearchParams(query).toString();
+    const queryString = queryStringOf(query);
     const headers: Record<string, string> = { authorization: `Bearer ${key}` };
     if (body !== undefined) headers['content-type'] = 'application/json';
     const response = await send(queryString === '' ? path : `${path}?${queryString}`, {
@@ -83,31 +127,34 @@ export function createApiClient({ apiKey, onUnauthorized, fetch: send = (...args
       if (response.status === UNAUTHORIZED) onUnauthorized();
       throw await failureOf(response);
     }
+    if (response.status === NO_CONTENT) return undefined as Result;
     return (await response.json()) as Result;
   }
 
-  async function allPages<Item>(path: string, query: Record<string, string> = {}): Promise<Item[]> {
-    const items: Item[] = [];
-    let cursor: string | null = null;
-    do {
-      const page: Page<Item> = await call(path, { query: cursor === null ? query : { ...query, cursor } });
-      items.push(...page.items);
-      cursor = page.nextCursor;
-    } while (cursor !== null);
-    return items;
-  }
-
-  const monitorPath = (monitorId: string) => `/v1/monitors/${encodeURIComponent(monitorId)}`;
+  const segment = encodeURIComponent;
+  const monitorPath = (monitorId: string) => `/v1/monitors/${segment(monitorId)}`;
+  const endpointPath = (endpointId: string) => `/v1/webhook-endpoints/${segment(endpointId)}`;
 
   return {
-    listMonitors: () => allPages('/v1/monitors'),
+    listMonitors: (params) => call('/v1/monitors', { query: params }),
     getMonitor: (monitorId) => call(monitorPath(monitorId)),
-    // Recent history is what the page shows, so the first page is enough.
-    listProbes: async (monitorId) => (await call<Page<Probe>>(`${monitorPath(monitorId)}/probes`)).items,
+    createMonitor: (request) => call('/v1/monitors', { method: 'POST', body: request }),
+    updateMonitor: (monitorId, request) => call(monitorPath(monitorId), { method: 'PATCH', body: request }),
+    deleteMonitor: (monitorId) => call(monitorPath(monitorId), { method: 'DELETE' }),
+    getHealthCounts: () => call('/v1/monitors/health-counts'),
+    getMonitorStats: (monitorId) => call(`${monitorPath(monitorId)}/stats`),
+    listProbes: (monitorId, params) => call(`${monitorPath(monitorId)}/probes`, { query: params }),
+    getSnapshot: (monitorId, hash) => call(`${monitorPath(monitorId)}/snapshots/${segment(hash)}`),
     getDrift: (monitorId) => call(`${monitorPath(monitorId)}/drift`),
     approveBaseline: (monitorId, snapshotHash) =>
       call(`${monitorPath(monitorId)}/baseline`, { method: 'POST', body: { snapshotHash } satisfies Schemas['ApproveBaselineRequest'] }),
-    listOpenIncidents: () => allPages('/v1/incidents', { state: 'open' }),
-    acknowledgeIncident: (incidentId) => call(`/v1/incidents/${encodeURIComponent(incidentId)}/acknowledge`, { method: 'POST' }),
+    listIncidents: (params) => call('/v1/incidents', { query: params }),
+    getIncidentCounts: () => call('/v1/incidents/counts'),
+    acknowledgeIncident: (incidentId) => call(`/v1/incidents/${segment(incidentId)}/acknowledge`, { method: 'POST' }),
+    listWebhookEndpoints: (params) => call('/v1/webhook-endpoints', { query: params }),
+    getWebhookEndpoint: (endpointId) => call(endpointPath(endpointId)),
+    createWebhookEndpoint: (request) => call('/v1/webhook-endpoints', { method: 'POST', body: request }),
+    updateWebhookEndpoint: (endpointId, request) => call(endpointPath(endpointId), { method: 'PATCH', body: request }),
+    deleteWebhookEndpoint: (endpointId) => call(endpointPath(endpointId), { method: 'DELETE' }),
   };
 }

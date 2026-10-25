@@ -5,7 +5,7 @@ import type { ApiClient } from './api/client.js';
 export const apiClientKey: InjectionKey<ApiClient> = Symbol('apiClient');
 export const apiKeyStoreKey: InjectionKey<ApiKeyStore> = Symbol('apiKeyStore');
 
-function required<Value>(key: InjectionKey<Value>, name: string): Value {
+export function required<Value>(key: InjectionKey<Value>, name: string): Value {
   const value = inject(key);
   if (value === undefined) throw new Error(`${name} was not provided to the app`);
   return value;
