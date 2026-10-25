@@ -3,20 +3,18 @@ import { computed, ref, useId } from 'vue';
 import { ApiError, type Monitor } from '../api/client.js';
 import { describeFailure } from '../api/describe-failure.js';
 import { useApiClient } from '../injection.js';
+import { DEFAULT_INTERVAL_SECONDS } from '../intervals.js';
+import IntervalSelect from './IntervalSelect.vue';
 import ModalDialog from './ModalDialog.vue';
 
 const emit = defineEmits<{ close: []; created: [monitor: Monitor] }>();
-
-const INTERVAL_MINUTES = [5, 15, 30, 60];
-const DEFAULT_INTERVAL_MINUTES = 15;
-const SECONDS_PER_MINUTE = 60;
 
 const client = useApiClient();
 const formId = useId();
 
 const name = ref('');
 const url = ref('');
-const intervalMinutes = ref(DEFAULT_INTERVAL_MINUTES);
+const intervalSeconds = ref(DEFAULT_INTERVAL_SECONDS);
 const authSecret = ref('');
 const sending = ref(false);
 const problems = ref<string[]>([]);
@@ -37,7 +35,7 @@ async function submit(): Promise<void> {
     const monitor = await client.createMonitor({
       name: name.value,
       url: url.value,
-      intervalSeconds: intervalMinutes.value * SECONDS_PER_MINUTE,
+      intervalSeconds: intervalSeconds.value,
       ...optionalAuthSecret.value,
     });
     emit('created', monitor);
@@ -61,13 +59,7 @@ async function submit(): Promise<void> {
         <span>URL</span>
         <input v-model="url" class="input" name="url" type="url" autocomplete="off" placeholder="https://example.com/mcp" required />
       </label>
-      <label class="field">
-        <span>Probe every</span>
-        <select v-model="intervalMinutes" class="input" name="interval">
-          <option v-for="minutes in INTERVAL_MINUTES" :key="minutes" :value="minutes">{{ minutes }} minutes</option>
-        </select>
-        <span class="hint">Deployed monitors are probed on the quarter hour, so 5 minutes only takes effect in demo mode.</span>
-      </label>
+      <IntervalSelect v-model="intervalSeconds" />
       <label class="field">
         <span>Bearer token (optional)</span>
         <input v-model="authSecret" class="input" name="authSecret" type="password" autocomplete="off" />

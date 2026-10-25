@@ -394,36 +394,3 @@ pre,
   background: var(--status-warning-background);
   color: var(--scalar-color-yellow);
 }
-
-.before-after {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-  padding: var(--space-2) 10px 10px;
-}
-
-.before-after h4 {
-  margin: 0 0 var(--space-1);
-  color: var(--scalar-color-3);
-  font-size: var(--font-size-small);
-  font-weight: 500;
-}
-
-.before-after pre {
-  margin: 0;
-  padding: var(--space-1) 6px;
-  border-radius: var(--radius-sm);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.before-after > div:first-child pre {
-  background: var(--diff-removed-background);
-  color: var(--diff-removed-color);
-}
-
-.before-after > div:last-child pre {
-  background: var(--diff-added-background);
-  color: var(--diff-added-color);
-}

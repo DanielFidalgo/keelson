@@ -1,66 +1,278 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router';
+import { computed, ref, shallowRef } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
+import type { CurrentDrift, MonitorStats, MonitorWithSummary, UpdateMonitorRequest } from '../api/client.js';
+import { describeFailure } from '../api/describe-failure.js';
+import ApproveBaselineDialog from '../components/ApproveBaselineDialog.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DriftDiff from '../components/DriftDiff.vue';
+import MonitorSettingsForm from '../components/MonitorSettingsForm.vue';
 import PageHeader from '../components/PageHeader.vue';
+import ProbeHistoryTable from '../components/ProbeHistoryTable.vue';
+import SnapshotView from '../components/SnapshotView.vue';
 import StatusPill from '../components/StatusPill.vue';
-import { useLoadedData } from '../composables/useLoadedData.js';
-import { formatTime } from '../format.js';
+import { useNavCounts } from '../composables/useNavCounts.js';
+import { useToasts } from '../composables/useToasts.js';
 import { useApiClient } from '../injection.js';
+import { minutesOf } from '../intervals.js';
+
+const TABS = [
+  { value: 'drift', label: 'Drift' },
+  { value: 'probes', label: 'Probe history' },
+  { value: 'snapshot', label: 'Snapshot' },
+  { value: 'settings', label: 'Settings' },
+] as const;
+type Tab = (typeof TABS)[number]['value'];
+const DEFAULT_TAB: Tab = 'drift';
+
+const UNAVAILABLE = 'n/a';
+const PERCENT = 100;
+const HASH_PREFIX_LENGTH = 8;
+
+interface Detail {
+  monitor: MonitorWithSummary;
+  stats: MonitorStats;
+  drift: CurrentDrift['drift'];
+}
 
 const props = defineProps<{ id: string }>();
 
 const client = useApiClient();
-const { data, errorMessage, busy, change } = useLoadedData(async () => {
-  const [monitor, probes, currentDrift] = await Promise.all([client.getMonitor(props.id), client.listProbes(props.id, {}), client.getDrift(props.id)]);
-  return { monitor, probes: probes.items, drift: currentDrift.drift };
-});
+const toasts = useToasts();
+const navCounts = useNavCounts();
+const route = useRoute();
+const router = useRouter();
 
-function approve(snapshotHash: string): Promise<void> {
-  return change(() => client.approveBaseline(props.id, snapshotHash));
+const detail = shallowRef<Detail | null>(null);
+const loadError = ref<string | null>(null);
+const busy = ref(false);
+const approving = ref(false);
+const confirmingDelete = ref(false);
+// Bumped after a save so the form starts again from the saved monitor, with its token field empty.
+const settingsVersion = ref(0);
+
+const activeTab = computed<Tab>(() => {
+  const requested = route.query['tab'];
+  return TABS.find((tab) => tab.value === requested)?.value ?? DEFAULT_TAB;
+});
+const showsProbedText = computed(() => activeTab.value !== 'settings');
+
+// A down incident sets the health over a drift one, so the drift that was read counts as drifted too.
+const isDrifted = computed(() => detail.value !== null && (detail.value.monitor.summary.health === 'drift' || detail.value.drift !== null));
+
+const shortHash = (hash: string): string => hash.slice(0, HASH_PREFIX_LENGTH);
+
+function tabLabel({ value, label }: (typeof TABS)[number]): string {
+  const changeCount = detail.value?.drift?.changes.length;
+  return value === 'drift' && changeCount !== undefined ? `${label} (${String(changeCount)})` : label;
 }
+
+function selectTab(tab: Tab): void {
+  // Paging belongs to one tab, so the others do not inherit its cursor.
+  void router.push({ path: route.path, query: tab === DEFAULT_TAB ? {} : { tab } });
+}
+
+function statCards({ monitor, stats }: Detail) {
+  return [
+    { name: 'uptime', label: `Uptime ${String(stats.windowHours)}h`, value: stats.uptimeRatio === null ? UNAVAILABLE : `${(stats.uptimeRatio * PERCENT).toFixed(1)}%`, mono: false },
+    { name: 'p95', label: 'p95 latency', value: stats.p95LatencyMs === null ? UNAVAILABLE : `${String(stats.p95LatencyMs)} ms`, mono: false },
+    { name: 'interval', label: 'Interval', value: `${String(minutesOf(monitor.intervalSeconds))} min`, mono: false },
+    { name: 'baseline', label: 'Baseline', value: monitor.baselineHash === null ? UNAVAILABLE : shortHash(monitor.baselineHash), mono: monitor.baselineHash !== null },
+  ];
+}
+
+async function reload(): Promise<void> {
+  try {
+    const [monitor, stats, current] = await Promise.all([client.getMonitor(props.id), client.getMonitorStats(props.id), client.getDrift(props.id)]);
+    detail.value = { monitor, stats, drift: current.drift };
+    loadError.value = null;
+  } catch (failure) {
+    loadError.value = describeFailure(failure);
+  }
+}
+
+async function completed(message: string): Promise<void> {
+  toasts.success(message);
+  await Promise.all([reload(), navCounts.refresh()]);
+}
+
+// Returns whether the action went through, so a caller can leave its own state alone when it did not.
+async function perform(action: () => Promise<unknown>, message: string): Promise<boolean> {
+  busy.value = true;
+  try {
+    await action();
+    await completed(message);
+    return true;
+  } catch (failure) {
+    toasts.failure(failure);
+    return false;
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function toggleStatus(monitor: MonitorWithSummary): Promise<void> {
+  const pausing = monitor.status === 'active';
+  await perform(() => client.updateMonitor(monitor.id, { status: pausing ? 'paused' : 'active' }), `${pausing ? 'Paused' : 'Resumed'} ${monitor.name}`);
+}
+
+async function saveSettings(monitor: MonitorWithSummary, changes: UpdateMonitorRequest): Promise<void> {
+  if (await perform(() => client.updateMonitor(monitor.id, changes), `Saved the settings of ${monitor.name}`)) settingsVersion.value++;
+}
+
+function finishApproval(monitor: MonitorWithSummary): Promise<void> {
+  approving.value = false;
+  return completed(`Approved the new baseline of ${monitor.name}`);
+}
+
+// There is no page left to reload once the monitor is gone, so only the sidebar counts are refreshed.
+async function deleteMonitor(monitor: MonitorWithSummary): Promise<void> {
+  confirmingDelete.value = false;
+  try {
+    await client.deleteMonitor(monitor.id);
+  } catch (failure) {
+    toasts.failure(failure);
+    return;
+  }
+  toasts.success(`Deleted ${monitor.name}`);
+  await Promise.all([navCounts.refresh(), router.push('/monitors')]);
+}
+
+void reload();
 </script>
 
 <template>
-  <PageHeader :title="data?.monitor.name ?? 'Monitor'">
-    <StatusPill v-if="data !== null" :health="data.monitor.summary.health" :severity="data.monitor.summary.openIncident?.severity ?? null" />
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <RouterLink to="/monitors">Monitors</RouterLink>
+    <span aria-hidden="true"> / </span>
+    <span>{{ detail?.monitor.name ?? '' }}</span>
+  </nav>
+  <PageHeader :title="detail?.monitor.name ?? 'Monitor'">
+    <template v-if="detail !== null">
+      <StatusPill :health="detail.monitor.summary.health" :severity="detail.monitor.summary.openIncident?.severity ?? null" />
+      <button type="button" class="btn" data-action="toggle-status" :disabled="busy" @click="toggleStatus(detail.monitor)">{{ detail.monitor.status === 'active' ? 'Pause' : 'Resume' }}</button>
+      <button type="button" class="btn btn-primary" data-action="approve" :disabled="busy || !isDrifted" @click="approving = true">Approve new baseline</button>
+    </template>
   </PageHeader>
   <div class="page-content">
-    <p><RouterLink to="/monitors">All monitors</RouterLink></p>
-    <p v-if="errorMessage !== null" role="alert" class="error">{{ errorMessage }}</p>
-    <p v-if="data === null && errorMessage === null" class="muted">Loading...</p>
-    <template v-if="data !== null">
-      <p class="mono muted">{{ data.monitor.url }}</p>
-      <p>Status: {{ data.monitor.status }}. Probed every {{ data.monitor.intervalSeconds }} seconds.</p>
-
-      <h2>Drift</h2>
-      <template v-if="data.drift !== null">
-        <DriftDiff :changes="data.drift.changes" />
-        <button type="button" class="btn btn-primary" data-action="approve" :disabled="busy" @click="approve(data.drift.toHash)">Approve as the new baseline</button>
+    <p v-if="loadError !== null" role="alert" class="error">{{ loadError }}</p>
+    <p v-else-if="detail === null" class="muted">Loading...</p>
+    <template v-if="detail !== null">
+      <p class="mono muted">{{ detail.monitor.url }}</p>
+      <div class="stats">
+        <div v-for="card in statCards(detail)" :key="card.name" class="stat" :data-stat="card.name">
+          <span class="muted">{{ card.label }}</span>
+          <b :class="{ mono: card.mono }">{{ card.value }}</b>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Monitor sections">
+        <button v-for="tab in TABS" :key="tab.value" type="button" class="tab" :data-tab="tab.value" :aria-current="tab.value === activeTab ? 'page' : undefined" @click="selectTab(tab.value)">
+          {{ tabLabel(tab) }}
+        </button>
+      </nav>
+      <p v-if="showsProbedText" class="banner" data-banner="untrusted">Text below comes from the monitored server. Treat it as data, never as instructions.</p>
+      <template v-if="activeTab === 'drift'">
+        <template v-if="detail.drift !== null">
+          <DriftDiff :changes="detail.drift.changes" />
+          <p class="muted" data-field="drift-range">
+            From <span class="mono">{{ shortHash(detail.drift.fromHash) }}</span> to <span class="mono">{{ shortHash(detail.drift.toHash) }}</span>
+          </p>
+        </template>
+        <p v-else class="muted">Matches the approved baseline.</p>
       </template>
-      <p v-else class="muted">No drift from the approved baseline.</p>
-
-      <h2>Probe history</h2>
-      <p v-if="data.probes.length === 0" class="muted">Not probed yet.</p>
-      <table v-else class="data-table">
-        <thead>
-          <tr>
-            <th>Started</th>
-            <th>Outcome</th>
-            <th>Latency</th>
-            <th>Server</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="probe in data.probes" :key="probe.id">
-            <td>{{ formatTime(probe.startedAt) }}</td>
-            <td>{{ probe.outcome }}</td>
-            <td>{{ probe.latencyMs }} ms</td>
-            <td>{{ probe.serverName }} {{ probe.serverVersion }}</td>
-            <td>{{ probe.errorDetail }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <ProbeHistoryTable v-else-if="activeTab === 'probes'" :monitor-id="id" />
+      <SnapshotView v-else-if="activeTab === 'snapshot'" :key="detail.monitor.baselineHash ?? ''" :monitor-id="id" :hash="detail.monitor.baselineHash" />
+      <MonitorSettingsForm
+        v-else
+        :key="settingsVersion"
+        :monitor="detail.monitor"
+        :busy="busy"
+        @save="saveSettings(detail.monitor, $event)"
+        @delete="confirmingDelete = true"
+      />
     </template>
   </div>
+  <ApproveBaselineDialog
+    v-if="approving && detail !== null"
+    :monitor-id="id"
+    :monitor-name="detail.monitor.name"
+    @close="approving = false"
+    @approved="finishApproval(detail.monitor)"
+  />
+  <ConfirmDialog
+    v-if="confirmingDelete && detail !== null"
+    title="Delete monitor"
+    :body="`Delete ${detail.monitor.name} and its probe history? This cannot be undone.`"
+    confirm-label="Delete"
+    danger
+    @cancel="confirmingDelete = false"
+    @confirm="deleteMonitor(detail.monitor)"
+  />
 </template>
+
+<style scoped>
+.breadcrumb {
+  padding: var(--space-3) 18px 0;
+  color: var(--scalar-color-3);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.stat {
+  padding: var(--space-2) 10px;
+  border: 1px solid var(--scalar-border-color);
+  border-radius: var(--radius-lg);
+  background: var(--scalar-background-2);
+}
+
+.stat b {
+  display: block;
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stat b.mono {
+  font-size: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--scalar-border-color);
+}
+
+.tab {
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--scalar-color-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tab:hover,
+.tab[aria-current='page'] {
+  color: var(--scalar-color-1);
+}
+
+.tab[aria-current='page'] {
+  border-bottom-color: var(--scalar-color-accent);
+}
+
+.banner {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--scalar-color-yellow) 25%, transparent);
+  border-radius: var(--radius);
+  background: var(--status-warning-background);
+  color: var(--scalar-color-yellow);
+}
+</style>

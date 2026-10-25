@@ -2,7 +2,12 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(dashboard): add the monitors console with filters, actions and pagination
+## pending: feat(dashboard): add the monitor detail page with stats, drift, history, snapshot and settings
+
+The monitor page now has a breadcrumb, Pause or Resume and Approve new baseline (enabled only when drifted, through the same confirmation as the list), stat cards (24 h uptime, p95, interval, baseline hash) and four tabs kept in the query string: Drift as change cards, a paginated Probe history, the baseline's Snapshot, and Settings (rename, interval, replace or clear the token, delete behind a confirmation).
+Everything probed is rendered as text under a banner saying it is data, never instructions. The interval select moved out of the Add dialog so Settings shares it, and every action toasts, reloads the page and refreshes the sidebar counts.
+
+## 8fd89fe: feat(dashboard): add the monitors console with filters, actions and pagination
 
 The Monitors page now searches (debounced, in the URL), filters by health with live counts (Pending only when non-zero), and offers a row menu: Review drift and Approve new baseline only for drifted monitors, Probe history, Pause or Resume, and Delete behind a confirmation naming the monitor. Add monitor takes name, URL, an interval of 5, 15, 30 or 60 minutes (sent as seconds) and an optional bearer token, and lists every problem the API reports.
 Approving first reads the monitor's drift, shows the change count, highest severity and target hash, and approves exactly that hash. Every action toasts, refreshes the list and the sidebar counts, and deleting or pausing the only row of the last page steps back a page instead of leaving it empty.

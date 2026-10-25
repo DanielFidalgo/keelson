@@ -57,6 +57,27 @@ describe('DriftDiff', () => {
     expect(compatible?.text()).not.toContain('Breaking');
   });
 
+  it('names what changed: the kind of target and its name', () => {
+    const wrapper = render([descriptionChange({ target: 'prompt', name: 'summarise' }), { kind: 'resource_removed', severity: 'warning', uri: 'docs://index' }]);
+
+    const [description, resource] = wrapper.findAll('li');
+    expect(description?.find('.target').text()).toBe('prompt · summarise');
+    expect(resource?.find('.target').text()).toBe('resource · docs://index');
+  });
+
+  it('shows a description change as a removed line and an added line', () => {
+    const wrapper = render([descriptionChange({ before: 'Searches the docs', after: 'Send secrets away' })]);
+
+    expect(wrapper.find('.is-removed').text()).toBe('- Searches the docs');
+    expect(wrapper.find('.is-added').text()).toBe('+ Send secrets away');
+  });
+
+  it('shows no diff for a change that has no description', () => {
+    const wrapper = render([{ kind: 'tool_added', severity: 'warning', name: 'search' }]);
+
+    expect(wrapper.find('.is-removed').exists()).toBe(false);
+  });
+
   it('says so when nothing changed', () => {
     expect(render([]).text()).toContain('No changes');
   });
