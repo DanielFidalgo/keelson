@@ -66,7 +66,7 @@ Shared: every list has pagination (page size 10, 20 or 50; "Showing a-b of total
 
 ## Behaviour
 
-- Health of a monitor, first match wins: `paused` (status paused), `down` (an open `down` incident), `drift` (an open `drift` incident), `pending` (no probe yet), otherwise `up`. A latest probe that failed without a `down` incident yet (fewer than 3 consecutive failures) still reads `up`; the failure shows in the sparkline and the last-probe cell. This rule lives in the domain (`monitorHealth`) and is the only place that knows it; the SQL health filter must produce the same result and a test pins both against the same cases.
+- Health of a monitor, first match wins: `paused` (status paused), `down` (an open `down` incident), `drift` (an open `drift` incident), `pending` (no probe yet), otherwise `up`. A latest probe that failed without a `down` incident yet (fewer than 3 consecutive failures) still reads `up`; the failure shows in the sparkline and the last-probe cell. This rule lives in the domain (`healthStateOf`) and is the only place that knows it; the SQL health filter must produce the same result and a test pins both against the same cases.
 - Lists refresh when the page opens, when filters change, after any action, on a Refresh button, and every 60 s while the tab is visible. The timer stops when the tab is hidden.
 - Filters, search, page size and the current page's cursor live in the URL query string (never the API key), so the browser back button and a pasted link restore the view.
 - Pagination stays cursor-based on the API. The dashboard keeps a stack of the cursors it has seen to offer Previous.
@@ -96,7 +96,7 @@ All are tenant-scoped like every `/v1` route. Totals are exact `count(*)` querie
 
 ## Testing
 
-- Domain: `monitorHealth` table of every precedence case.
+- Domain: `healthStateOf` table of every precedence case.
 - Application: queries return the right health filter, search, totals and summaries with the in-memory adapters.
 - Postgres: the same behaviour against the real database (health filter, search, totals, recent latencies order, stats with and without probes, incident filters and counts, tenant isolation).
 - API: each new parameter and field, validation of `health`/`kind`/`q`, and tenant isolation.
@@ -105,7 +105,7 @@ All are tenant-scoped like every `/v1` route. Totals are exact `count(*)` querie
 
 ## Calls made after the builder check (author's calls, not discussed)
 
-1. `GET /v1/monitors/{monitorId}` also returns the same `summary` as list items, so the detail page reads health, open incident and latest probe from one call. `monitorHealth` stays the single source of the rule.
+1. `GET /v1/monitors/{monitorId}` also returns the same `summary` as list items, so the detail page reads health, open incident and latest probe from one call. `healthStateOf` stays the single source of the rule.
 2. Incident filters map to the API as: Open = `state=open&acknowledged=false`, Acknowledged = `state=open&acknowledged=true`, Resolved = `state=resolved`. Acknowledging does not change a monitor's health (an acknowledged `down` incident still means `down`). The sidebar badge counts open unacknowledged incidents (what still needs attention); the Overview "open incidents" list shows all open ones, acknowledged marked as such.
 3. Overview lists monitors whose health is `down` or `drift` (two filtered list calls, 10 each). It does not try to show single failed probes below the 3-failure threshold.
 4. A list row's "Approve new baseline" first fetches `GET /v1/monitors/{id}/drift`, shows a confirmation dialog with the number of changes, their highest severity and the target hash (`toHash`, mono), and approves that hash. Nothing is approved blind.

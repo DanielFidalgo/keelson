@@ -9,5 +9,7 @@ export * from './drift/schema-change.js';
 export * from './drift/drift.js';
 export * from './incidents/incident.js';
 export * from './monitoring/health.js';
+export * from './monitoring/health-state.js';
+export * from './monitoring/health-state-cases.js';
 export * from './incidents/alert.js';
 export * from './alerting/webhook-endpoint.js';

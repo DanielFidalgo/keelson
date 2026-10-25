@@ -4,7 +4,7 @@
 
 **Goal:** Turn the Keelson dashboard into a dark, Scalar-styled monitoring console with pagination, filtering, search and every API action, backed by read-only API additions.
 
-**Architecture:** Health is a domain rule (`monitorHealth`). The application gains read-model ports (`MonitorDirectory`, `IncidentDirectory`) whose Postgres adapters compute summaries, filters and totals in SQL; queries compose them. The API exposes them OpenAPI-first; the dashboard regenerates its types and rebuilds its views on one shared list foundation (URL-synced filters, cursor stack, refresh timer).
+**Architecture:** Health is a domain rule (`healthStateOf`). The application gains read-model ports (`MonitorDirectory`, `IncidentDirectory`) whose Postgres adapters compute summaries, filters and totals in SQL; queries compose them. The API exposes them OpenAPI-first; the dashboard regenerates its types and rebuilds its views on one shared list foundation (URL-synced filters, cursor stack, refresh timer).
 
 **Tech Stack:** TypeScript 6, Vitest 5, Fastify 5 + fastify-openapi-glue, `pg`, Vue 3.5 + vue-router 5 + Vite 8, @vue/test-utils + happy-dom, openapi-typescript.
 
@@ -26,7 +26,7 @@
 
 ## Review Focus
 
-1. The SQL health filter and the domain `monitorHealth` disagree on an edge case (paused with an open incident, no probe yet with an incident): a parity test runs the same case table through both (Task 1 defines the table, Task 3 asserts Postgres against it).
+1. The SQL health filter and the domain `healthStateOf` disagree on an edge case (paused with an open incident, no probe yet with an incident): a parity test runs the same case table through both (Task 1 defines the table, Task 3 asserts Postgres against it).
 2. Changing a filter, search or page size while on page 3 must reset to page 1 and drop the cursor stack; a stale cursor under a new filter shows wrong rows (test in Task 5).
 3. The 60 s refresh timer must stop on unmount and while the tab is hidden; a leaked timer keeps polling after navigation (test in Task 5).
 4. Deleting, approving or pausing the last row of the last page must step back a page instead of showing an empty page (test in Task 6).
@@ -37,14 +37,14 @@
 ### Task 1: Domain health rule
 
 **Files:**
-- Create: `packages/domain/src/monitoring/monitor-health.ts`, `packages/domain/src/monitoring/monitor-health.test.ts`, `packages/domain/src/monitoring/monitor-health-cases.ts` (the shared case table, exported for Task 3's parity test)
+- Create: `packages/domain/src/monitoring/health-state.ts`, `packages/domain/src/monitoring/health-state.test.ts`, `packages/domain/src/monitoring/health-state-cases.ts` (the shared case table, exported for Task 3's parity test)
 - Modify: `packages/domain/src/index.ts` (export)
 
 **Interfaces:**
-- Produces: `type MonitorHealth = 'up' | 'drift' | 'down' | 'paused' | 'pending'`; `MONITOR_HEALTHS: readonly MonitorHealth[]`; `interface MonitorHealthInputs { status: MonitorStatus; hasProbe: boolean; openIncidentKinds: readonly IncidentKind[] }`; `monitorHealth(inputs: MonitorHealthInputs): MonitorHealth`; `MONITOR_HEALTH_CASES: readonly { name: string; inputs: MonitorHealthInputs; expected: MonitorHealth }[]`.
+- Produces: `type HealthState = 'up' | 'drift' | 'down' | 'paused' | 'pending'`; `HEALTH_STATES: readonly HealthState[]`; `interface HealthStateInputs { status: MonitorStatus; hasProbe: boolean; openIncidentKinds: readonly IncidentKind[] }`; `healthStateOf(inputs: HealthStateInputs): HealthState`; `HEALTH_STATE_CASES: readonly { name: string; inputs: HealthStateInputs; expected: HealthState }[]`.
 
-- [ ] **Step 1: Write the failing test.** `it.each(MONITOR_HEALTH_CASES)` asserts `monitorHealth(inputs) === expected`. The table must contain at least: paused with an open down incident -> `paused`; active, down and drift both open -> `down`; drift only -> `drift`; no probe and no incident -> `pending`; no probe but an open drift incident -> `drift`; probed, no incident -> `up`; paused and never probed -> `paused`.
-- [ ] **Step 2: Run to verify it fails.** `npx vitest run packages/domain/src/monitoring/monitor-health.test.ts`
+- [ ] **Step 1: Write the failing test.** `it.each(HEALTH_STATE_CASES)` asserts `healthStateOf(inputs) === expected`. The table must contain at least: paused with an open down incident -> `paused`; active, down and drift both open -> `down`; drift only -> `drift`; no probe and no incident -> `pending`; no probe but an open drift incident -> `drift`; probed, no incident -> `up`; paused and never probed -> `paused`.
+- [ ] **Step 2: Run to verify it fails.** `npx vitest run packages/domain/src/monitoring/health-state.test.ts`
 - [ ] **Step 3: Implement** first-match-wins in the spec's order (paused, down, drift, pending, up).
 - [ ] **Step 4: Run to verify it passes.** Same command.
 - [ ] **Step 5: Commit command.** `git add packages/domain COMMITS.md` / `git commit -m "feat(domain): derive a monitor's health from status, probes and open incidents"`
@@ -58,13 +58,13 @@
 - Modify: `packages/application/src/ports/repositories.ts` (add `CountedPage`; `ProbeRepository.listForMonitor` and `WebhookEndpointRepository.listForTenant` return `CountedPage`), `packages/application/src/ports/unit-of-work.ts` (`Transaction` gains `monitorDirectory` and `incidentDirectory`), `packages/application/src/testing/in-memory-repositories.ts`, `packages/application/src/testing/in-memory-unit-of-work.ts`, `packages/application/src/queries/queries.ts` (existing `listProbes`/`listWebhookEndpoints` return `CountedPage`), `packages/application/src/index.ts`
 
 **Interfaces:**
-- Consumes: `monitorHealth`, `MonitorHealth`, `MONITOR_HEALTHS` (Task 1); existing `Monitor`, `Probe`, `Incident`, `Severity`, `IncidentKind`, `PageRequest`, `Page`.
+- Consumes: `healthStateOf`, `HealthState`, `HEALTH_STATES` (Task 1); existing `Monitor`, `Probe`, `Incident`, `Severity`, `IncidentKind`, `PageRequest`, `Page`.
 - Produces (`ports/directories.ts`):
   - `interface CountedPage<T> extends Page<T> { total: number }`
   - `interface LatestProbe { outcome: ProbeOutcome; startedAt: Date; latencyMs: number }`
-  - `interface MonitorSummary { monitor: Monitor; health: MonitorHealth; latestProbe: LatestProbe | null; recentLatenciesMs: (number | null)[]; toolCount: number | null; openIncident: { id: string; kind: IncidentKind; severity: Severity | null } | null }`
-  - `interface MonitorFilter { health: MonitorHealth | null; search: string | null }`
-  - `type HealthCounts = Record<MonitorHealth, number> & { total: number }`
+  - `interface MonitorSummary { monitor: Monitor; health: HealthState; latestProbe: LatestProbe | null; recentLatenciesMs: (number | null)[]; toolCount: number | null; openIncident: { id: string; kind: IncidentKind; severity: Severity | null } | null }`
+  - `interface MonitorFilter { health: HealthState | null; search: string | null }`
+  - `type HealthCounts = Record<HealthState, number> & { total: number }`
   - `interface ProbeStats { windowHours: number; probes: number; uptimeRatio: number | null; p95LatencyMs: number | null }`
   - `interface MonitorDirectory { listSummaries(tenantId: string, filter: MonitorFilter, page: PageRequest): Promise<CountedPage<MonitorSummary>>; summaryOf(tenantId: string, monitorId: string): Promise<MonitorSummary | null>; healthCounts(tenantId: string): Promise<HealthCounts>; probeStats(monitorId: string, since: Date): Promise<ProbeStats> }`
   - `interface IncidentView { incident: Incident; monitorName: string; severity: Severity | null }`
@@ -82,9 +82,9 @@
   - `incident views carry the monitor name and drift severity; filters combine state, kind and acknowledged; counts exclude acknowledged from open`
   - `another tenant's monitor is NotFoundError for summary and stats`
   - `listProbes and listWebhookEndpoints now include total`
-  - The in-memory `MonitorDirectory` computes health with `monitorHealth` and passes every row of `MONITOR_HEALTH_CASES`.
+  - The in-memory `MonitorDirectory` computes health with `healthStateOf` and passes every row of `HEALTH_STATE_CASES`.
 - [ ] **Step 2: Run to verify they fail.** `npx vitest run packages/application/src/queries packages/application/src/testing`
-- [ ] **Step 3: Implement** the ports, the in-memory directories over the existing in-memory maps, and the queries. Queries hold no rules beyond composing ports and `monitorHealth`.
+- [ ] **Step 3: Implement** the ports, the in-memory directories over the existing in-memory maps, and the queries. Queries hold no rules beyond composing ports and `healthStateOf`.
 - [ ] **Step 4: Run to verify they pass.** `npx vitest run packages/application/src`
 - [ ] **Step 5: Commit command.** `git add packages/application COMMITS.md` / `git commit -m "feat(application): add monitor and incident read models for the dashboard"`
 
@@ -97,11 +97,11 @@
 - Modify: `packages/infrastructure/src/postgres/unit-of-work.ts` (wire both directories into the transaction), `probe-repository.ts` and `webhook-endpoint-repository.ts` (totals), `packages/infrastructure/src/index.ts`
 
 **Interfaces:**
-- Consumes: Task 2 ports; `MONITOR_HEALTH_CASES` (Task 1).
+- Consumes: Task 2 ports; `HEALTH_STATE_CASES` (Task 1).
 - Produces: `class PostgresMonitorDirectory implements MonitorDirectory { constructor(deps: { client: Queryable }) }`, `class PostgresIncidentDirectory implements IncidentDirectory { constructor(deps: { client: Queryable }) }` (use the same `Queryable` type and construction pattern the repositories in `unit-of-work.ts` use).
 
 - [ ] **Step 1: Write the failing tests** against Testcontainers Postgres, mirroring Task 2's list plus:
-  - `parity: for every MONITOR_HEALTH_CASES row, the SQL health of a seeded monitor equals the case's expected value, and the health filter returns it`
+  - `parity: for every HEALTH_STATE_CASES row, the SQL health of a seeded monitor equals the case's expected value, and the health filter returns it`
   - `search matches name or url case-insensitively and treats %, _ and \ literally`
   - `recent latencies come from the newest 24 probes, ordered oldest first`
   - `tool count reads the baseline snapshot's tools array length`
@@ -146,7 +146,7 @@
 **Interfaces:**
 - Produces:
   - `useListQuery<Filters extends Record<string, string | null>>(options: { defaults: Filters; pageSizes: readonly number[]; load: (args: { filters: Filters; cursor: string | null; limit: number }) => Promise<{ items: unknown[]; nextCursor: string | null; total: number }>; refreshMs?: number })` returning reactive `{ items, total, page, pageSize, filters, loading, error, rangeLabel, hasNext, hasPrevious, next(), previous(), setFilter(name, value), setPageSize(n), refresh() }`. It syncs `filters`, `page`, `limit` and `cursor` to the route query, keeps a cursor stack for Previous, resets to page 1 on any filter or size change, refreshes every `refreshMs` (default 60 000) only while `document.visibilityState === 'visible'`, and stops on unmount. `rangeLabel` reads "Showing a-b of total" (a = (page - 1) x size + 1).
-  - `StatusPill` props `{ health: MonitorHealth | 'resolved'; severity?: 'critical' | 'warning' | null; label?: string }` (dot + text, colours per the spec).
+  - `StatusPill` props `{ health: HealthState | 'resolved'; severity?: 'critical' | 'warning' | null; label?: string }` (dot + text, colours per the spec).
   - `LatencySparkline` props `{ values: (number | null)[] }` (null drawn as a red full-height bar).
   - `useToasts()` `{ success(text), failure(error) }`; `ConfirmDialog` props `{ title, body, confirmLabel, danger? }`, emits `confirm`, `cancel`.
 - Page sizes `[10, 20, 50]`, default 20; search debounce `SEARCH_DEBOUNCE_MS = 300`.

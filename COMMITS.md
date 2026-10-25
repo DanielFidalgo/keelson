@@ -2,7 +2,11 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: docs(plan): add the dashboard redesign plan
+## pending: feat(domain): derive a monitor's health from status, probes and open incidents
+
+`healthStateOf` is the single rule for a monitor's health (`paused`, `down`, `drift`, `pending`, otherwise `up`, first match wins), so the read models, API and dashboard never re-derive it. `HEALTH_STATE_CASES` is the shared precedence table the Postgres filter's parity test will reuse. The plan and spec rename to `HealthState` ships with it.
+
+## af9063e: docs(plan): add the dashboard redesign plan
 
 Eight test-first tasks: the domain health rule, application read models, their Postgres queries, the API contract, then the dashboard shell and its Monitors, Monitor detail, Incidents, Webhooks and Overview pages.
 
