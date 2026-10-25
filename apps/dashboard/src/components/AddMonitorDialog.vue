@@ -1,0 +1,104 @@
+<script setup lang="ts">
+import { computed, ref, useId } from 'vue';
+import { ApiError, type Monitor } from '../api/client.js';
+import { describeFailure } from '../api/describe-failure.js';
+import { useApiClient } from '../injection.js';
+import ModalDialog from './ModalDialog.vue';
+
+const emit = defineEmits<{ close: []; created: [monitor: Monitor] }>();
+
+const INTERVAL_MINUTES = [5, 15, 30, 60];
+const DEFAULT_INTERVAL_MINUTES = 15;
+const SECONDS_PER_MINUTE = 60;
+
+const client = useApiClient();
+const formId = useId();
+
+const name = ref('');
+const url = ref('');
+const intervalMinutes = ref(DEFAULT_INTERVAL_MINUTES);
+const authSecret = ref('');
+const sending = ref(false);
+const problems = ref<string[]>([]);
+
+const optionalAuthSecret = computed(() => (authSecret.value === '' ? {} : { authSecret: authSecret.value }));
+
+// A 400 lists every field that was wrong, so all of them are shown at once rather than one per attempt.
+function problemsOf(failure: unknown): string[] {
+  const listed = failure instanceof ApiError ? failure.problem.errors : undefined;
+  return listed !== undefined && listed.length > 0 ? listed : [describeFailure(failure)];
+}
+
+async function submit(): Promise<void> {
+  if (sending.value) return;
+  sending.value = true;
+  problems.value = [];
+  try {
+    const monitor = await client.createMonitor({
+      name: name.value,
+      url: url.value,
+      intervalSeconds: intervalMinutes.value * SECONDS_PER_MINUTE,
+      ...optionalAuthSecret.value,
+    });
+    emit('created', monitor);
+  } catch (failure) {
+    problems.value = problemsOf(failure);
+  } finally {
+    sending.value = false;
+  }
+}
+</script>
+
+<template>
+  <ModalDialog title="Add monitor" @close="emit('close')">
+    <!-- The API is the authority on what is valid, so its messages are shown instead of the browser's. -->
+    <form :id="formId" class="monitor-form" novalidate @submit.prevent="submit">
+      <label class="field">
+        <span>Name</span>
+        <input v-model="name" class="input" name="name" type="text" autocomplete="off" required data-autofocus />
+      </label>
+      <label class="field">
+        <span>URL</span>
+        <input v-model="url" class="input" name="url" type="url" autocomplete="off" placeholder="https://example.com/mcp" required />
+      </label>
+      <label class="field">
+        <span>Probe every</span>
+        <select v-model="intervalMinutes" class="input" name="interval">
+          <option v-for="minutes in INTERVAL_MINUTES" :key="minutes" :value="minutes">{{ minutes }} minutes</option>
+        </select>
+        <span class="hint">Deployed monitors are probed on the quarter hour, so 5 minutes only takes effect in demo mode.</span>
+      </label>
+      <label class="field">
+        <span>Bearer token (optional)</span>
+        <input v-model="authSecret" class="input" name="authSecret" type="password" autocomplete="off" />
+      </label>
+      <div v-if="problems.length > 0" class="error" role="alert">
+        <ul class="problems">
+          <li v-for="problem in problems" :key="problem">{{ problem }}</li>
+        </ul>
+      </div>
+    </form>
+    <template #footer>
+      <button type="button" class="btn" data-action="cancel" @click="emit('close')">Cancel</button>
+      <button type="submit" class="btn btn-primary" data-action="submit" :form="formId" :disabled="sending">Add monitor</button>
+    </template>
+  </ModalDialog>
+</template>
+
+<style scoped>
+.monitor-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--scalar-color-2);
+}
+
+.problems {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+</style>

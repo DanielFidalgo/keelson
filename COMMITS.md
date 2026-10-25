@@ -2,7 +2,12 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(dashboard): add the Scalar-themed shell and shared list behaviour
+## pending: feat(dashboard): add the monitors console with filters, actions and pagination
+
+The Monitors page now searches (debounced, in the URL), filters by health with live counts (Pending only when non-zero), and offers a row menu: Review drift and Approve new baseline only for drifted monitors, Probe history, Pause or Resume, and Delete behind a confirmation naming the monitor. Add monitor takes name, URL, an interval of 5, 15, 30 or 60 minutes (sent as seconds) and an optional bearer token, and lists every problem the API reports.
+Approving first reads the monitor's drift, shows the change count, highest severity and target hash, and approves exactly that hash. Every action toasts, refreshes the list and the sidebar counts, and deleting or pausing the only row of the last page steps back a page instead of leaving it empty.
+
+## acec191: feat(dashboard): add the Scalar-themed shell and shared list behaviour
 
 The dashboard now wears the Scalar API Reference dark theme (its tokens as CSS custom properties, system font stacks) inside a sidebar shell with live counts, and its API client covers every operation, with paged methods returning the page and its `total`.
 Every list shares `useListQuery` (filters, page, size and cursor in the URL, a cursor stack for Previous, a refresh that only ticks while the tab is visible), `DataList` (skeleton, empty and error states) and `ListPagination`, next to `StatusPill`, `LatencySparkline`, `ConfirmDialog`, toasts and relative times. The Monitors and Incidents pages are minimally adapted to them until the page tasks replace them.
