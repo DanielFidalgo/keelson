@@ -2,7 +2,9 @@ import type { Transaction, UnitOfWork } from '@keelson/application';
 import type { Pool } from 'pg';
 import { PostgresApiKeys } from './api-key-repository.js';
 import { PostgresDrifts } from './drift-repository.js';
+import { PostgresIncidentDirectory } from './incident-directory.js';
 import { PostgresIncidents } from './incident-repository.js';
+import { PostgresMonitorDirectory } from './monitor-directory.js';
 import { PostgresMonitors } from './monitor-repository.js';
 import { PostgresOutbox } from './outbox.js';
 import { PostgresProbes } from './probe-repository.js';
@@ -26,6 +28,8 @@ export function createTransaction(db: Queryable): Transaction {
     outbox: new PostgresOutbox({ db }),
     tenants: new PostgresTenants({ db }),
     apiKeys: new PostgresApiKeys({ db }),
+    monitorDirectory: new PostgresMonitorDirectory({ db }),
+    incidentDirectory: new PostgresIncidentDirectory({ db }),
   };
 }
 

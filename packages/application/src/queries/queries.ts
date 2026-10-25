@@ -10,7 +10,7 @@ import {
 } from '@keelson/domain';
 import { NotFoundError } from '../shared/errors.js';
 import { requireOwned } from '../shared/ownership.js';
-import type { Page, PageRequest, Transaction } from '../ports/index.js';
+import type { CountedPage, Page, PageRequest, Transaction } from '../ports/index.js';
 
 export interface MonitorQuery {
   tenantId: string;
@@ -31,7 +31,7 @@ export async function getMonitor(tx: Transaction, { tenantId, monitorId }: Monit
   return requireOwned(await tx.monitors.get(monitorId), tenantId, 'monitor');
 }
 
-export async function listProbes(tx: Transaction, input: MonitorQuery & { page: PageRequest }): Promise<Page<Probe>> {
+export async function listProbes(tx: Transaction, input: MonitorQuery & { page: PageRequest }): Promise<CountedPage<Probe>> {
   await getMonitor(tx, input);
   return tx.probes.listForMonitor(input.monitorId, input.page);
 }
@@ -71,7 +71,7 @@ export function listIncidents(
 export function listWebhookEndpoints(
   tx: Transaction,
   input: { tenantId: string; page: PageRequest },
-): Promise<Page<WebhookEndpoint>> {
+): Promise<CountedPage<WebhookEndpoint>> {
   return tx.webhookEndpoints.listForTenant(input.tenantId, input.page);
 }
 

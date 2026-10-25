@@ -12,6 +12,7 @@ import { compareCodeUnits } from '@keelson/domain';
 import { paginate } from '../shared/pagination.js';
 import type {
   ApiKeyRepository,
+  CountedPage,
   DriftRepository,
   IncidentRepository,
   MonitorRepository,
@@ -27,6 +28,10 @@ import type {
 } from '../ports/index.js';
 
 const byId = (item: { id: string }): string => item.id;
+
+export function paginateCounted<T>(ordered: readonly T[], page: PageRequest, keyOf: (item: T) => string): CountedPage<T> {
+  return { ...paginate(ordered, page, keyOf), total: ordered.length };
+}
 
 const newestFirst = (left: Date, right: Date): number => right.getTime() - left.getTime();
 
@@ -80,8 +85,8 @@ export class InMemoryProbes implements ProbeRepository {
     return Promise.resolve(latest ?? null);
   }
 
-  listForMonitor(monitorId: string, page: PageRequest): Promise<Page<Probe>> {
-    return Promise.resolve(paginate(this.forMonitor(monitorId), page, byId));
+  listForMonitor(monitorId: string, page: PageRequest): Promise<CountedPage<Probe>> {
+    return Promise.resolve(paginateCounted(this.forMonitor(monitorId), page, byId));
   }
 
   monitorHasSnapshot(monitorId: string, hash: SnapshotHash): Promise<boolean> {
@@ -90,7 +95,7 @@ export class InMemoryProbes implements ProbeRepository {
 
   // Newest by start time, not by slot: slots of different intervals are not comparable, so after an
   // interval change a higher slot can belong to an older probe.
-  private forMonitor(monitorId: string): Probe[] {
+  forMonitor(monitorId: string): Probe[] {
     return [...this.records.values()]
       .filter((probe) => probe.monitorId === monitorId)
       .sort((left, right) => newestFirst(left.startedAt, right.startedAt) || compareCodeUnits(right.id, left.id));
@@ -179,8 +184,8 @@ export class InMemoryWebhookEndpoints implements WebhookEndpointRepository {
     return Promise.resolve(this.ownedBy(tenantId).filter((endpoint) => endpoint.status === 'active'));
   }
 
-  listForTenant(tenantId: string, page: PageRequest): Promise<Page<WebhookEndpoint>> {
-    return Promise.resolve(paginate(this.ownedBy(tenantId), page, byId));
+  listForTenant(tenantId: string, page: PageRequest): Promise<CountedPage<WebhookEndpoint>> {
+    return Promise.resolve(paginateCounted(this.ownedBy(tenantId), page, byId));
   }
 
   private ownedBy(tenantId: string): WebhookEndpoint[] {

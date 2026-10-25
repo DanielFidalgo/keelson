@@ -1,3 +1,4 @@
+import type { IncidentDirectory, MonitorDirectory } from './directories.js';
 import type {
   ApiKeyRepository,
   DriftRepository,
@@ -20,6 +21,8 @@ export interface Transaction {
   outbox: Outbox;
   tenants: TenantRepository;
   apiKeys: ApiKeyRepository;
+  monitorDirectory: MonitorDirectory;
+  incidentDirectory: IncidentDirectory;
 }
 
 export interface UnitOfWork {

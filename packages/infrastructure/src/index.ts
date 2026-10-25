@@ -11,9 +11,12 @@ export * from './internal-auth/oidc-verifier.js';
 export * from './internal-auth/static-token.js';
 export * from './postgres/api-key-repository.js';
 export * from './postgres/drift-repository.js';
-export * from './postgres/incident-repository.js';
+export * from './postgres/incident-directory.js';
+// The row mappers are shared by the Postgres adapters only, so just the repository is public.
+export { PostgresIncidents } from './postgres/incident-repository.js';
 export * from './postgres/migrations.js';
-export * from './postgres/monitor-repository.js';
+export * from './postgres/monitor-directory.js';
+export { PostgresMonitors } from './postgres/monitor-repository.js';
 export * from './postgres/outbox.js';
 export * from './postgres/pool.js';
 export * from './postgres/probe-repository.js';

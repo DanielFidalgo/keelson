@@ -1,6 +1,7 @@
 export * from './shared/errors.js';
 export * from './shared/pagination.js';
 export * from './ports/index.js';
+export * from './queries/dashboard-queries.js';
 export * from './queries/queries.js';
 export * from './incidents/acknowledge-incident.js';
 export * from './monitors/approve-baseline.js';

@@ -1,6 +1,6 @@
 import type { Probe, SnapshotHash } from '@keelson/domain';
-import type { Page, PageRequest, ProbeRepository } from '@keelson/application';
-import { selectPage } from './paging.js';
+import type { CountedPage, PageRequest, ProbeRepository } from '@keelson/application';
+import { selectCountedPage } from './paging.js';
 import { firstOrNull, type Queryable, type RepositoryDeps } from './queryable.js';
 
 interface ProbeRow {
@@ -69,8 +69,8 @@ export class PostgresProbes implements ProbeRepository {
     return firstOrNull(rows, toProbe);
   }
 
-  listForMonitor(monitorId: string, page: PageRequest): Promise<Page<Probe>> {
-    return selectPage<ProbeRow, Probe>(
+  listForMonitor(monitorId: string, page: PageRequest): Promise<CountedPage<Probe>> {
+    return selectCountedPage<ProbeRow, Probe>(
       this.db,
       {
         select: 'select * from probes',

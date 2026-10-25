@@ -215,6 +215,6 @@ describe('incident and endpoint queries', () => {
     expect(page.items.map((endpoint) => endpoint.id)).toEqual(['whk_1']);
     expect(own.id).toBe('whk_1');
     await expect(foreign).rejects.toBeInstanceOf(NotFoundError);
-    expect(await listWebhookEndpoints(harness.db, { tenantId: OTHER_TENANT, page: FIRST_PAGE })).toEqual({ items: [], nextCursor: null });
+    expect(await listWebhookEndpoints(harness.db, { tenantId: OTHER_TENANT, page: FIRST_PAGE })).toEqual({ items: [], nextCursor: null, total: 0 });
   });
 });

@@ -2,7 +2,12 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(domain): derive a monitor's health from status, probes and open incidents
+## pending: feat: add monitor and incident read models for the dashboard
+
+`MonitorDirectory` and `IncidentDirectory` are new read-side ports with in-memory and Postgres adapters, so the dashboard can list monitor summaries (health, latest probe, recent latencies, tool count, open incident), health counts, 24 h probe stats, and incident views and counts with filters. The Postgres health is one `CASE` expression shared by listing, filtering and counting, and a parity test runs it over `HEALTH_STATE_CASES`; search escapes `%`, `_` and `\` so they match literally.
+Probe and webhook endpoint listings now return a `total` (`CountedPage`) alongside the page.
+
+## 693edda: feat(domain): derive a monitor's health from status, probes and open incidents
 
 `healthStateOf` is the single rule for a monitor's health (`paused`, `down`, `drift`, `pending`, otherwise `up`, first match wins), so the read models, API and dashboard never re-derive it. `HEALTH_STATE_CASES` is the shared precedence table the Postgres filter's parity test will reuse. The plan and spec rename to `HealthState` ships with it.
 

@@ -3,7 +3,7 @@ import type { MonitorRepository, Page, PageRequest } from '@keelson/application'
 import { selectPage } from './paging.js';
 import { firstOrNull, type Queryable, type RepositoryDeps } from './queryable.js';
 
-interface MonitorRow {
+export interface MonitorRow {
   id: string;
   tenant_id: string;
   name: string;
@@ -18,7 +18,7 @@ interface MonitorRow {
   created_at: Date;
 }
 
-function toMonitor(row: MonitorRow): Monitor {
+export function toMonitor(row: MonitorRow): Monitor {
   return {
     id: row.id,
     tenantId: row.tenant_id,

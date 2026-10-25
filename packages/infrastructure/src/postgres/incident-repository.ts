@@ -3,7 +3,7 @@ import type { IncidentRepository, Page, PageRequest } from '@keelson/application
 import { selectPage } from './paging.js';
 import { firstOrNull, type Queryable, type RepositoryDeps } from './queryable.js';
 
-interface IncidentRow {
+export interface IncidentRow {
   id: string;
   monitor_id: string;
   kind: IncidentKind;
@@ -15,7 +15,7 @@ interface IncidentRow {
   last_drift_id: string | null;
 }
 
-function toIncident(row: IncidentRow): Incident {
+export function toIncident(row: IncidentRow): Incident {
   return {
     id: row.id,
     monitorId: row.monitor_id,

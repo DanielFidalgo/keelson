@@ -1,4 +1,5 @@
 import type { Transaction, UnitOfWork } from '../ports/index.js';
+import { InMemoryIncidentDirectory, InMemoryMonitorDirectory } from './in-memory-directories.js';
 import {
   InMemoryApiKeys,
   InMemoryDrifts,
@@ -21,6 +22,18 @@ export class InMemoryTransaction implements Transaction {
   readonly outbox = new InMemoryOutbox(this.webhookEndpoints);
   readonly tenants = new InMemoryTenants();
   readonly apiKeys = new InMemoryApiKeys();
+  readonly monitorDirectory = new InMemoryMonitorDirectory({
+    monitors: this.monitors,
+    probes: this.probes,
+    incidents: this.incidents,
+    drifts: this.drifts,
+    snapshots: this.snapshots,
+  });
+  readonly incidentDirectory = new InMemoryIncidentDirectory({
+    monitors: this.monitors,
+    incidents: this.incidents,
+    drifts: this.drifts,
+  });
 }
 
 // Deliberately has no rollback: work runs straight against the shared maps, so a failure part-way

@@ -23,6 +23,11 @@ export interface Page<T> {
   nextCursor: string | null;
 }
 
+// The total counts every item the request's filters match, not just the ones on this page.
+export interface CountedPage<T> extends Page<T> {
+  total: number;
+}
+
 export interface MonitorRepository {
   get(id: string): Promise<Monitor | null>;
   lockForUpdate(id: string): Promise<Monitor | null>;
@@ -35,7 +40,7 @@ export interface MonitorRepository {
 export interface ProbeRepository {
   insertIfAbsent(probe: Probe): Promise<boolean>;
   latestUp(monitorId: string): Promise<Probe | null>;
-  listForMonitor(monitorId: string, page: PageRequest): Promise<Page<Probe>>;
+  listForMonitor(monitorId: string, page: PageRequest): Promise<CountedPage<Probe>>;
   monitorHasSnapshot(monitorId: string, hash: SnapshotHash): Promise<boolean>;
 }
 
@@ -65,7 +70,7 @@ export interface WebhookEndpointRepository {
   save(endpoint: WebhookEndpoint): Promise<void>;
   delete(id: string): Promise<void>;
   listActive(tenantId: string): Promise<WebhookEndpoint[]>;
-  listForTenant(tenantId: string, page: PageRequest): Promise<Page<WebhookEndpoint>>;
+  listForTenant(tenantId: string, page: PageRequest): Promise<CountedPage<WebhookEndpoint>>;
 }
 
 export interface OutboxMessage {

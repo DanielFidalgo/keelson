@@ -1,6 +1,6 @@
 import type { WebhookEndpoint } from '@keelson/domain';
-import type { Page, PageRequest, WebhookEndpointRepository } from '@keelson/application';
-import { selectPage } from './paging.js';
+import type { CountedPage, PageRequest, WebhookEndpointRepository } from '@keelson/application';
+import { selectCountedPage } from './paging.js';
 import { firstOrNull, type Queryable, type RepositoryDeps } from './queryable.js';
 
 interface WebhookEndpointRow {
@@ -77,8 +77,8 @@ export class PostgresWebhookEndpoints implements WebhookEndpointRepository {
     return rows.map(toWebhookEndpoint);
   }
 
-  listForTenant(tenantId: string, page: PageRequest): Promise<Page<WebhookEndpoint>> {
-    return selectPage<WebhookEndpointRow, WebhookEndpoint>(
+  listForTenant(tenantId: string, page: PageRequest): Promise<CountedPage<WebhookEndpoint>> {
+    return selectCountedPage<WebhookEndpointRow, WebhookEndpoint>(
       this.db,
       {
         select: 'select * from webhook_endpoints',
