@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { HealthState } from '../api/client.js';
+import { HEALTH_LABELS, INCIDENT_STATE_LABELS } from '../labels.js';
 
 const props = defineProps<{ health: HealthState | 'resolved'; severity?: 'critical' | 'warning' | null; label?: string }>();
 
 type Tone = 'success' | 'critical' | 'warning' | 'danger' | 'neutral';
 
-const PLAIN_LABELS: Record<HealthState | 'resolved', string> = {
-  up: 'Up',
-  drift: 'Drift',
-  down: 'Down',
-  paused: 'Paused',
-  pending: 'Pending',
-  resolved: 'Resolved',
-};
+const PLAIN_LABELS: Record<HealthState | 'resolved', string> = { ...HEALTH_LABELS, resolved: INCIDENT_STATE_LABELS.resolved };
 
 // A drift incident without a severity is treated as critical, the safer reading of an unknown.
 const tone = computed<Tone>(() => {

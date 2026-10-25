@@ -2,6 +2,7 @@
 import type { Probe } from '../api/client.js';
 import { PAGE_SIZES, useListQuery } from '../composables/useListQuery.js';
 import { useApiClient } from '../injection.js';
+import { PROBE_OUTCOME_LABELS } from '../labels.js';
 import DataList from './DataList.vue';
 import ListPagination from './ListPagination.vue';
 import RelativeTime from './RelativeTime.vue';
@@ -10,13 +11,6 @@ import StatusPill from './StatusPill.vue';
 const props = defineProps<{ monitorId: string }>();
 
 const COLUMNS = ['Time', 'Outcome', 'Latency', 'Server', 'Detail'];
-const OUTCOME_LABELS: Record<Probe['outcome'], string> = {
-  up: 'Up',
-  timeout: 'Timeout',
-  connection_error: 'Connection error',
-  protocol_error: 'Protocol error',
-  auth_error: 'Auth error',
-};
 
 const client = useApiClient();
 
@@ -41,7 +35,7 @@ const serverOf = ({ serverName, serverVersion }: Probe): string => [serverName, 
   >
     <tr v-for="probe in list.items" :key="probe.id">
       <td class="text-secondary"><RelativeTime :timestamp="probe.startedAt" /></td>
-      <td><StatusPill :health="probe.outcome === 'up' ? 'up' : 'down'" :label="OUTCOME_LABELS[probe.outcome]" /></td>
+      <td><StatusPill :health="probe.outcome === 'up' ? 'up' : 'down'" :label="PROBE_OUTCOME_LABELS[probe.outcome]" /></td>
       <td class="mono">{{ probe.latencyMs }} ms</td>
       <td>{{ serverOf(probe) }}</td>
       <td class="detail"><span class="detail-text" :title="probe.errorDetail ?? undefined">{{ probe.errorDetail }}</span></td>

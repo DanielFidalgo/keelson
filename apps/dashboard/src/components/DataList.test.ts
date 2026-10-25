@@ -63,6 +63,17 @@ describe('DataList', () => {
     expect(wrapper.emitted('retry')).toHaveLength(1);
   });
 
+  it('keeps the rows under a banner when a refresh fails after the list had loaded', async () => {
+    const wrapper = list({ error: 'The API answered 502.' });
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('The API answered 502.');
+    expect(wrapper.find('tbody').text()).toContain('Docs');
+    expect(wrapper.text()).not.toContain('Could not load this list');
+    await wrapper.find('button[data-action="retry"]').trigger('click');
+
+    expect(wrapper.emitted('retry')).toHaveLength(1);
+  });
+
   it('renders the failure as text', () => {
     const wrapper = list({ error: '<img src=x onerror=alert(1)>' });
 

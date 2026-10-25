@@ -1,9 +1,14 @@
 import { flushPromises } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type ApiClient, type Change, type MonitorStats, type MonitorWithSummary, type Probe, type Snapshot } from '../api/client.js';
+import { REFRESH_MS } from '../composables/useListQuery.js';
 import { createNavCounts } from '../composables/useNavCounts.js';
 import { createToasts } from '../composables/useToasts.js';
 import { MONITOR, MONITOR_WITH_SUMMARY, SUMMARY, mountPageAt, pageOf, stubClient } from '../test-support.js';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const FROM_HASH = 'b'.repeat(64);
 const TO_HASH = 'c'.repeat(64);
@@ -78,6 +83,62 @@ describe('MonitorPage header', () => {
     const wrapper = await mountPageAt('/monitors/missing', stubClient({ getMonitor: vi.fn(() => Promise.reject(new ApiError(problem))) }));
 
     expect(wrapper.find('[role="alert"]').text()).toContain('There is no such monitor.');
+  });
+});
+
+describe('MonitorPage freshness', () => {
+  const tickClock = () => vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+
+  it('reloads the summary, the stats and the drift every minute so the header agrees with the history table', async () => {
+    tickClock();
+    const getMonitor = vi.fn(() => Promise.resolve(MONITOR_WITH_SUMMARY));
+    const getMonitorStats = vi.fn(() => Promise.resolve(STATS));
+    const wrapper = await open(stubClient({ getMonitor, getMonitorStats }));
+    getMonitor.mockResolvedValue(DRIFTED);
+
+    await vi.advanceTimersByTimeAsync(REFRESH_MS);
+
+    expect(getMonitor).toHaveBeenCalledTimes(2);
+    expect(getMonitorStats).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('.status-pill').text()).toContain('Drift');
+  });
+
+  it('keeps the last data under an error banner when a timed reload fails', async () => {
+    tickClock();
+    const getMonitorStats = vi.fn(() => Promise.resolve(STATS));
+    const wrapper = await open(stubClient({ getMonitorStats }));
+    getMonitorStats.mockRejectedValueOnce(new Error('offline'));
+
+    await vi.advanceTimersByTimeAsync(REFRESH_MS);
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('offline');
+    expect(wrapper.find('[role="alert"]').text()).toContain('Showing what was loaded before.');
+    expect(wrapper.find('h1').text()).toBe('Docs');
+    expect(stat(wrapper, 'uptime')).toContain('98.8%');
+  });
+
+  it('drops the banner once the next reload succeeds', async () => {
+    tickClock();
+    const getMonitorStats = vi.fn(() => Promise.resolve(STATS));
+    const wrapper = await open(stubClient({ getMonitorStats }));
+    getMonitorStats.mockRejectedValueOnce(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(REFRESH_MS);
+
+    await press(wrapper, 'button[data-action="retry"]');
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('h1').text()).toBe('Docs');
+  });
+
+  it('reloads on the Refresh button, which is there even when the first load failed', async () => {
+    const getMonitor = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(MONITOR_WITH_SUMMARY);
+    const wrapper = await open(stubClient({ getMonitor }));
+    expect(wrapper.find('h1').text()).toBe('Monitor');
+
+    await press(wrapper, 'button[data-action="refresh"]');
+
+    expect(getMonitor).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('h1').text()).toBe('Docs');
   });
 });
 

@@ -211,6 +211,29 @@ describe('WebhooksPage', () => {
       expect(refreshNavCounts).toHaveBeenCalledOnce();
     });
 
+    it('disables the row buttons while the update runs, so a double click sends it once', async () => {
+      let finishUpdate!: () => void;
+      const updateWebhookEndpoint = vi.fn(
+        () =>
+          new Promise<WebhookEndpoint>((resolve) => {
+            finishUpdate = () => {
+              resolve(SLACK);
+            };
+          }),
+      );
+      const wrapper = await mountPageAt('/webhooks', stubClient({ listWebhookEndpoints: listing(SLACK), updateWebhookEndpoint }));
+
+      await buttonIn(wrapper, 'disable')?.trigger('click');
+      await buttonIn(wrapper, 'disable')?.trigger('click');
+
+      expect(updateWebhookEndpoint).toHaveBeenCalledOnce();
+      expect(buttonIn(wrapper, 'disable')?.attributes('disabled')).toBeDefined();
+      expect(buttonIn(wrapper, 'delete')?.attributes('disabled')).toBeDefined();
+      finishUpdate();
+      await flushPromises();
+      expect(buttonIn(wrapper, 'disable')?.attributes('disabled')).toBeUndefined();
+    });
+
     it('shows the problem as a toast when the update fails', async () => {
       const client = stubClient({ listWebhookEndpoints: listing(SLACK), updateWebhookEndpoint: vi.fn(() => Promise.reject(new Error('offline'))) });
       const toasts = createToasts();

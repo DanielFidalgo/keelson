@@ -65,6 +65,17 @@ describe('OverviewPage', () => {
     expect(rows[1]).toContain('Acknowledged');
   });
 
+  it('words the state of an incident as the Incidents page does, with no badge of its own', async () => {
+    const { client } = overviewClient();
+
+    const wrapper = await mountPageAt('/', client);
+
+    const states = wrapper.findAll('[data-incident] [data-cell="state"]').map((cell) => cell.text());
+    expect(states[0]).toBe('Open');
+    expect(states[1]).toMatch(/^Acknowledged/);
+    expect(wrapper.find('.badge').exists()).toBe(false);
+  });
+
   it('links each incident to its monitor and the section to all incidents', async () => {
     const wrapper = await mountPageAt('/', overviewClient().client);
 

@@ -63,6 +63,14 @@ describe('MonitorsPage', () => {
     expect(wrapper.text()).toContain('Showing 1-1 of 1');
   });
 
+  it('words a failed latest probe with the same label as the probe history', async () => {
+    const failing = { ...MONITOR_WITH_SUMMARY, summary: { ...SUMMARY, latestProbe: { outcome: 'connection_error' as const, startedAt: '2026-10-22T12:00:00.000Z', latencyMs: 0 } } };
+
+    const wrapper = await mountPageAt('/monitors', stubClient({ listMonitors: vi.fn(() => Promise.resolve(pageOf([failing]))) }));
+
+    expect(wrapper.text()).toContain('Connection error');
+  });
+
   it('renders a hostile monitor name as text', async () => {
     const hostile = { ...MONITOR_WITH_SUMMARY, name: '<img src=x onerror=alert(1)>' };
     const client = stubClient({ listMonitors: vi.fn(() => Promise.resolve(pageOf([hostile]))) });

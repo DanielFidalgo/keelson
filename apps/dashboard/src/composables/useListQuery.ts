@@ -69,6 +69,13 @@ export function useListQuery<Filters extends FilterValues, Item = unknown>({ def
   // cursors[n] loads page n + 1. It only knows the pages walked through in this view, not the ones a pasted link skipped.
   let cursors: (string | null)[] = [];
   let latestRequest = 0;
+  let loadedRequestKey: string | null = null;
+
+  function clearRows(): void {
+    items.value = [];
+    total.value = 0;
+    nextCursor.value = null;
+  }
 
   async function refresh(): Promise<void> {
     const request = ++latestRequest;
@@ -81,12 +88,12 @@ export function useListQuery<Filters extends FilterValues, Item = unknown>({ def
       total.value = loaded.total;
       nextCursor.value = loaded.nextCursor;
       error.value = null;
+      loadedRequestKey = requestKey.value;
     } catch (failure) {
       if (request !== latestRequest) return;
-      items.value = [];
-      total.value = 0;
-      nextCursor.value = null;
       error.value = describeFailure(failure);
+      // A failed timed refresh keeps the rows being read, but rows of another filter or page would contradict what was asked for.
+      if (requestKey.value !== loadedRequestKey) clearRows();
     } finally {
       if (request === latestRequest) loading.value = false;
     }

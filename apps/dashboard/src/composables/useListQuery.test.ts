@@ -248,6 +248,33 @@ describe('useListQuery', () => {
     expect(list.items).toHaveLength(20);
   });
 
+  it('keeps the last items, total and paging when a refresh of the same view fails', async () => {
+    const load = pagedLoad();
+    const { list } = await mountList(load);
+    load.mockRejectedValueOnce(new Error('offline'));
+
+    await list.refresh();
+
+    expect(list.error).toContain('offline');
+    expect(list.items).toHaveLength(20);
+    expect(list.total).toBe(TOTAL);
+    expect(list.hasNext).toBe(true);
+  });
+
+  it('drops the items of the old view when loading a different one fails', async () => {
+    const load = pagedLoad();
+    const { list } = await mountList(load);
+    load.mockRejectedValueOnce(new Error('offline'));
+
+    list.setFilter('q', 'new');
+    await flushPromises();
+
+    expect(list.error).toContain('offline');
+    expect(list.items).toEqual([]);
+    expect(list.total).toBe(0);
+    expect(list.hasNext).toBe(false);
+  });
+
   it('ignores an answer that arrives after a newer request', async () => {
     const answers: ((value: Awaited<ReturnType<Load>>) => void)[] = [];
     const load = vi.fn<Load>(() => new Promise((resolve) => answers.push(resolve)));

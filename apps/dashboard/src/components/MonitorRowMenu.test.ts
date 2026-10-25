@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory } from 'vue-router';
 import type { MonitorWithSummary } from '../api/client.js';
 import { createAppRouter } from '../router.js';
@@ -10,6 +10,7 @@ const drifted: MonitorWithSummary = { ...MONITOR_WITH_SUMMARY, summary: { ...SUM
 const paused: MonitorWithSummary = { ...MONITOR_WITH_SUMMARY, status: 'paused', summary: { ...SUMMARY, health: 'paused' } };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   document.body.innerHTML = '';
 });
 
@@ -43,6 +44,18 @@ describe('MonitorRowMenu', () => {
 
     expect(trigger(wrapper).attributes('aria-expanded')).toBe('true');
     expect(document.activeElement).toBe(wrapper.find('[role="menuitem"]').element);
+  });
+
+  it('focuses the first item without scrolling, which would trip the scroll listener that closes the menu', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation((options?: FocusOptions) => {
+      // A browser scrolls the focused item into view unless told not to, and that scroll closes the menu.
+      if (options?.preventScroll !== true) window.dispatchEvent(new Event('scroll'));
+    });
+
+    const wrapper = await open();
+
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true);
   });
 
   it('offers only probe history, pause and delete for a monitor that is not drifted', async () => {

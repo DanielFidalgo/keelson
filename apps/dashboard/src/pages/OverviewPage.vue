@@ -2,6 +2,8 @@
 import { computed, ref, shallowRef } from 'vue';
 import { RouterLink } from 'vue-router';
 import DataList from '../components/DataList.vue';
+import ErrorBanner from '../components/ErrorBanner.vue';
+import IncidentState from '../components/IncidentState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import RelativeTime from '../components/RelativeTime.vue';
 import StatusPill from '../components/StatusPill.vue';
@@ -64,10 +66,7 @@ void load();
 
 <template>
   <PageHeader title="Overview" />
-  <div v-if="error !== null" class="failure error" role="alert">
-    <span>Could not load the overview: {{ error }}<template v-if="overview !== null"> Showing what was loaded before.</template></span>
-    <button type="button" class="btn" data-action="retry" @click="load()">Retry</button>
-  </div>
+  <ErrorBanner v-if="error !== null" :message="`Could not load the overview: ${error}`" :showing-previous="overview !== null" @retry="load()" />
   <template v-if="overview !== null || error === null">
     <div v-if="overview !== null" class="counters">
       <RouterLink v-for="[name, label, health] in COUNTERS" :key="name" class="counter" :data-counter="name" :to="{ name: 'monitors', query: health === null ? {} : { health } }">
@@ -86,9 +85,7 @@ void load();
         </td>
         <td><StatusPill :health="incident.kind" :severity="incident.severity" /></td>
         <td class="text-secondary"><RelativeTime :timestamp="incident.openedAt" /></td>
-        <td>
-          <span v-if="incident.acknowledgedAt !== null" class="badge">Acknowledged</span>
-        </td>
+        <td data-cell="state"><IncidentState :incident="incident" /></td>
       </tr>
     </DataList>
     <div class="section-heading"><h2>Monitors needing attention</h2></div>
@@ -106,14 +103,6 @@ void load();
 </template>
 
 <style scoped>
-.failure {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: var(--space-4) 18px;
-}
-
 .counters {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

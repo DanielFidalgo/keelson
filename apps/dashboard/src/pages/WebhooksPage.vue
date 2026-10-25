@@ -8,8 +8,7 @@ import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
 import type { WebhookEndpoint } from '../api/client.js';
 import { PAGE_SIZES, useListQuery } from '../composables/useListQuery.js';
-import { useNavCounts } from '../composables/useNavCounts.js';
-import { useToasts } from '../composables/useToasts.js';
+import { useAction } from '../composables/useAction.js';
 import { useApiClient } from '../injection.js';
 
 const COLUMNS = ['Endpoint', 'Format', 'Status', 'Failures', 'Actions'];
@@ -17,14 +16,13 @@ const FORMAT_LABELS: Record<WebhookEndpoint['format'], string> = { standard: 'St
 const MASK = '••••';
 
 const client = useApiClient();
-const toasts = useToasts();
-const navCounts = useNavCounts();
 
 const list = useListQuery({
   defaults: {},
   pageSizes: PAGE_SIZES,
   load: ({ cursor, limit }) => client.listWebhookEndpoints({ cursor, limit }),
 });
+const action = useAction(() => list.refreshAfterChange());
 const addingWebhook = ref(false);
 const endpointToDelete = shallowRef<WebhookEndpoint | null>(null);
 
@@ -43,34 +41,18 @@ function maskedUrl(url: string): string {
   return base === null ? MASK : `${base}/${MASK}`;
 }
 
-async function afterChange(): Promise<void> {
-  await Promise.all([list.refreshAfterChange(), navCounts.refresh()]);
+async function setStatus(endpoint: WebhookEndpoint, status: WebhookEndpoint['status']): Promise<void> {
+  await action.perform(() => client.updateWebhookEndpoint(endpoint.id, { status }), `${status === 'disabled' ? 'Disabled' : 'Enabled'} the webhook endpoint`);
 }
 
-async function perform(action: () => Promise<unknown>, message: string): Promise<void> {
-  try {
-    await action();
-  } catch (failure) {
-    toasts.failure(failure);
-    return;
-  }
-  toasts.success(message);
-  await afterChange();
-}
-
-function setStatus(endpoint: WebhookEndpoint, status: WebhookEndpoint['status']): Promise<void> {
-  return perform(() => client.updateWebhookEndpoint(endpoint.id, { status }), `${status === 'disabled' ? 'Disabled' : 'Enabled'} the webhook endpoint`);
-}
-
-function deleteEndpoint(endpoint: WebhookEndpoint): Promise<void> {
+async function deleteEndpoint(endpoint: WebhookEndpoint): Promise<void> {
   endpointToDelete.value = null;
-  return perform(() => client.deleteWebhookEndpoint(endpoint.id), 'Deleted the webhook endpoint');
+  await action.perform(() => client.deleteWebhookEndpoint(endpoint.id), 'Deleted the webhook endpoint');
 }
 
-// The dialog stays open to show the signing secret, so only the list behind it is brought up to date.
+// The dialog stays open to show the signing secret, so unlike the other actions nothing here closes it.
 function noteAdded(): Promise<void> {
-  toasts.success('Added the webhook endpoint');
-  return afterChange();
+  return action.completed('Added the webhook endpoint');
 }
 </script>
 
@@ -96,9 +78,9 @@ function noteAdded(): Promise<void> {
       <td><StatusPill :health="endpoint.status === 'active' ? 'up' : 'paused'" :label="endpoint.status === 'active' ? 'Active' : 'Disabled'" /></td>
       <td data-cell="failures">{{ endpoint.consecutiveFailures }}</td>
       <td class="actions-cell">
-        <button v-if="endpoint.status === 'active'" type="button" class="btn btn-small" data-action="disable" @click="setStatus(endpoint, 'disabled')">Disable</button>
-        <button v-else type="button" class="btn btn-small" data-action="enable" @click="setStatus(endpoint, 'active')">Enable</button>
-        <button type="button" class="btn btn-small" data-action="delete" @click="endpointToDelete = endpoint">Delete</button>
+        <button v-if="endpoint.status === 'active'" type="button" class="btn btn-small" data-action="disable" :disabled="action.busy.value" @click="setStatus(endpoint, 'disabled')">Disable</button>
+        <button v-else type="button" class="btn btn-small" data-action="enable" :disabled="action.busy.value" @click="setStatus(endpoint, 'active')">Enable</button>
+        <button type="button" class="btn btn-small" data-action="delete" :disabled="action.busy.value" @click="endpointToDelete = endpoint">Delete</button>
       </td>
     </tr>
   </DataList>

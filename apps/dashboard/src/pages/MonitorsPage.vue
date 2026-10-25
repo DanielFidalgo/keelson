@@ -14,25 +14,17 @@ import SegmentedControl from '../components/SegmentedControl.vue';
 import StatusPill from '../components/StatusPill.vue';
 import type { HealthCounts, HealthState, Monitor, MonitorSummary, MonitorWithSummary } from '../api/client.js';
 import { PAGE_SIZES, SEARCH_DEBOUNCE_MS, useListQuery } from '../composables/useListQuery.js';
-import { useNavCounts } from '../composables/useNavCounts.js';
-import { useToasts } from '../composables/useToasts.js';
+import { useAction } from '../composables/useAction.js';
 import { useApiClient } from '../injection.js';
+import { HEALTH_LABELS, PROBE_OUTCOME_LABELS } from '../labels.js';
 
 const COLUMNS = ['Monitor', 'Status', 'Latency', 'Tools', 'Last probe', 'Actions'];
-const HEALTH_FILTERS = [
-  ['up', 'Up'],
-  ['drift', 'Drift'],
-  ['down', 'Down'],
-  ['paused', 'Paused'],
-  ['pending', 'Pending'],
-] as const satisfies readonly (readonly [HealthState, string])[];
+const HEALTH_FILTERS: readonly HealthState[] = ['up', 'drift', 'down', 'paused', 'pending'];
 const FILTER_DEFAULTS: { health: string | null; q: string | null } = { health: null, q: null };
 // The API rejects a longer search, so the box does not let one be typed. openapi.yaml is the source of this number.
 const SEARCH_MAX_LENGTH = 100;
 
 const client = useApiClient();
-const toasts = useToasts();
-const navCounts = useNavCounts();
 
 const healthCounts = shallowRef<HealthCounts | null>(null);
 const addingMonitor = ref(false);
@@ -41,7 +33,7 @@ const monitorToDelete = shallowRef<MonitorWithSummary | null>(null);
 
 // A health in a pasted link that is not one of the states would be a 400, so it is read as no filter.
 function healthOf(requested: string | null): HealthState | null {
-  return HEALTH_FILTERS.find(([state]) => state === requested)?.[0] ?? null;
+  return HEALTH_FILTERS.find((state) => state === requested) ?? null;
 }
 
 async function refreshHealthCounts(): Promise<void> {
@@ -61,14 +53,15 @@ async function loadMonitorsAndCounts({ filters, cursor, limit }: { filters: type
 
 const list = useListQuery({ defaults: FILTER_DEFAULTS, pageSizes: PAGE_SIZES, load: loadMonitorsAndCounts });
 
+const action = useAction(() => list.refreshAfterChange());
 const activeHealth = computed(() => healthOf(list.filters.health));
 const isFiltered = computed(() => activeHealth.value !== null || (list.filters.q ?? '') !== '');
 
 const healthOptions = computed(() => {
   const counts = healthCounts.value;
   const countFor = (state: HealthState | 'total') => (counts === null ? {} : { count: counts[state] });
-  const shown = HEALTH_FILTERS.filter(([state]) => state !== 'pending' || state === activeHealth.value || (counts?.pending ?? 0) > 0);
-  return [{ value: null, label: 'All', ...countFor('total') }, ...shown.map(([state, label]) => ({ value: state, label, ...countFor(state) }))];
+  const shown = HEALTH_FILTERS.filter((state) => state !== 'pending' || state === activeHealth.value || (counts?.pending ?? 0) > 0);
+  return [{ value: null, label: 'All', ...countFor('total') }, ...shown.map((state) => ({ value: state, label: HEALTH_LABELS[state], ...countFor(state) }))];
 });
 
 const searchText = ref(list.filters.q ?? '');
@@ -96,47 +89,28 @@ onBeforeUnmount(() => {
   clearTimeout(pendingSearch);
 });
 
-async function afterChange(): Promise<void> {
-  await Promise.all([list.refreshAfterChange(), navCounts.refresh()]);
+async function setStatus(monitor: MonitorWithSummary, status: Monitor['status']): Promise<void> {
+  await action.perform(() => client.updateMonitor(monitor.id, { status }), `${status === 'paused' ? 'Paused' : 'Resumed'} ${monitor.name}`);
 }
 
-async function completed(message: string): Promise<void> {
-  toasts.success(message);
-  await afterChange();
-}
-
-async function perform(action: () => Promise<unknown>, message: string): Promise<void> {
-  try {
-    await action();
-  } catch (failure) {
-    toasts.failure(failure);
-    return;
-  }
-  await completed(message);
-}
-
-function setStatus(monitor: MonitorWithSummary, status: Monitor['status']): Promise<void> {
-  return perform(() => client.updateMonitor(monitor.id, { status }), `${status === 'paused' ? 'Paused' : 'Resumed'} ${monitor.name}`);
-}
-
-function deleteMonitor(monitor: MonitorWithSummary): Promise<void> {
+async function deleteMonitor(monitor: MonitorWithSummary): Promise<void> {
   monitorToDelete.value = null;
-  return perform(() => client.deleteMonitor(monitor.id), `Deleted ${monitor.name}`);
+  await action.perform(() => client.deleteMonitor(monitor.id), `Deleted ${monitor.name}`);
 }
 
 function finishAdding(monitor: Monitor): Promise<void> {
   addingMonitor.value = false;
-  return completed(`Added ${monitor.name}`);
+  return action.completed(`Added ${monitor.name}`);
 }
 
 function finishApproval(monitor: MonitorWithSummary): Promise<void> {
   monitorToApprove.value = null;
-  return completed(`Approved the new baseline of ${monitor.name}`);
+  return action.completed(`Approved the new baseline of ${monitor.name}`);
 }
 
 function latestLatency({ latestProbe }: MonitorSummary): string {
   if (latestProbe === null) return '';
-  return latestProbe.outcome === 'up' ? `${String(latestProbe.latencyMs)} ms` : latestProbe.outcome.replace('_', ' ');
+  return latestProbe.outcome === 'up' ? `${String(latestProbe.latencyMs)} ms` : PROBE_OUTCOME_LABELS[latestProbe.outcome];
 }
 </script>
 

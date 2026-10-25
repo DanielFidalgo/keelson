@@ -2,7 +2,12 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
-## pending: feat(dashboard): add incidents, webhooks and overview pages
+## pending: fix(dashboard): keep views fresh and consistent before the walkthrough
+
+The monitor page now reloads every minute like the history table beside it and has a Refresh button, and a failed refresh keeps the data under an error banner; lists do the same instead of emptying, showing the full error only when nothing had loaded. The row menu focuses its first item without scrolling, so opening it can no longer close it.
+Display labels moved to one module and acknowledged incidents read the same on Overview and Incidents. The run, toast, refresh and nav-count sequence became `useAction`, which also disables the buttons while an action runs (no more double Disable or Delete on Webhooks), and the unused `change` and `busy` left `useLoadedData`.
+
+## b7d8ffb: feat(dashboard): add incidents, webhooks and overview pages
 
 Incidents now has Open, Acknowledged and Resolved tabs with counts (sent to the API as `state` and `acknowledged`) and a kind filter; resolved incidents show how they ended (Recovered, Approved or Reverted) and how long they lasted, and Acknowledge appears only on open, unacknowledged rows. Webhooks lists endpoints showing only the scheme and host of their URL, and adds, enables, disables and deletes them (behind a confirmation); the signing secret is shown once in a copyable box inside the add dialog and is kept nowhere else.
 Overview shows four counters that link to the filtered monitors, the five latest open incidents (acknowledged ones marked) and the down and drifted monitors, and reloads every minute. `useListQuery` gained `refreshAfterChange`, so actions on the last row of a page step back instead of leaving it empty, and the 400 problem list moved to `describeProblems`, shared by both Add dialogs.

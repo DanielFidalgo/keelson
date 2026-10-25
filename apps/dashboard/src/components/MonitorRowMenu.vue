@@ -33,7 +33,8 @@ async function place(): Promise<void> {
 async function show(): Promise<void> {
   open.value = true;
   await place();
-  items()[0]?.focus();
+  // Scrolling the item into view would scroll the table under the fixed menu, and the scroll listener would close the menu.
+  items()[0]?.focus({ preventScroll: true });
 }
 
 function close(): void {

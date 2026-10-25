@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ErrorBanner from './ErrorBanner.vue';
+
 defineProps<{ columns: readonly string[]; loading: boolean; error: string | null; isEmpty: boolean; emptyTitle: string; emptyHint?: string }>();
 
 defineEmits<{ retry: [] }>();
@@ -12,7 +14,9 @@ const skeletonWidth = (row: number, column: number): string => SKELETON_WIDTHS[(
 
 <template>
   <div class="data-list" :aria-busy="loading">
-    <div v-if="error !== null" class="list-state" role="alert">
+    <!-- Once rows have loaded, a failed refresh keeps them and is reported above; the full state is for a list that never loaded. -->
+    <ErrorBanner v-if="error !== null && !isEmpty" :message="`Could not refresh this list: ${error}`" showing-previous @retry="$emit('retry')" />
+    <div v-if="error !== null && isEmpty" class="list-state" role="alert">
       <p class="list-state-title">Could not load this list</p>
       <p class="list-state-detail">{{ error }}</p>
       <button type="button" class="btn" data-action="retry" @click="$emit('retry')">Retry</button>

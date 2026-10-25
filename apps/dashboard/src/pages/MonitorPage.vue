@@ -6,13 +6,17 @@ import { describeFailure } from '../api/describe-failure.js';
 import ApproveBaselineDialog from '../components/ApproveBaselineDialog.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DriftDiff from '../components/DriftDiff.vue';
+import ErrorBanner from '../components/ErrorBanner.vue';
 import MonitorSettingsForm from '../components/MonitorSettingsForm.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ProbeHistoryTable from '../components/ProbeHistoryTable.vue';
 import SnapshotView from '../components/SnapshotView.vue';
 import StatusPill from '../components/StatusPill.vue';
+import { useAction } from '../composables/useAction.js';
+import { REFRESH_MS } from '../composables/useListQuery.js';
 import { useNavCounts } from '../composables/useNavCounts.js';
 import { useToasts } from '../composables/useToasts.js';
+import { useVisibleInterval } from '../composables/useVisibleInterval.js';
 import { useApiClient } from '../injection.js';
 import { minutesOf } from '../intervals.js';
 
@@ -45,7 +49,6 @@ const router = useRouter();
 
 const detail = shallowRef<Detail | null>(null);
 const loadError = ref<string | null>(null);
-const busy = ref(false);
 const approving = ref(false);
 const confirmingDelete = ref(false);
 // Bumped after a save so the form starts again from the saved monitor, with its token field empty.
@@ -81,48 +84,36 @@ function statCards({ monitor, stats }: Detail) {
   ];
 }
 
+let latestRequest = 0;
+
 async function reload(): Promise<void> {
+  const request = ++latestRequest;
   try {
     const [monitor, stats, current] = await Promise.all([client.getMonitor(props.id), client.getMonitorStats(props.id), client.getDrift(props.id)]);
+    if (request !== latestRequest) return;
     detail.value = { monitor, stats, drift: current.drift };
     loadError.value = null;
   } catch (failure) {
+    if (request !== latestRequest) return;
+    // The last good data stays: a failed minute-by-minute reload should not blank a page the user is reading.
     loadError.value = describeFailure(failure);
   }
 }
 
-async function completed(message: string): Promise<void> {
-  toasts.success(message);
-  await Promise.all([reload(), navCounts.refresh()]);
-}
-
-// Returns whether the action went through, so a caller can leave its own state alone when it did not.
-async function perform(action: () => Promise<unknown>, message: string): Promise<boolean> {
-  busy.value = true;
-  try {
-    await action();
-    await completed(message);
-    return true;
-  } catch (failure) {
-    toasts.failure(failure);
-    return false;
-  } finally {
-    busy.value = false;
-  }
-}
+const action = useAction(reload);
 
 async function toggleStatus(monitor: MonitorWithSummary): Promise<void> {
   const pausing = monitor.status === 'active';
-  await perform(() => client.updateMonitor(monitor.id, { status: pausing ? 'paused' : 'active' }), `${pausing ? 'Paused' : 'Resumed'} ${monitor.name}`);
+  await action.perform(() => client.updateMonitor(monitor.id, { status: pausing ? 'paused' : 'active' }), `${pausing ? 'Paused' : 'Resumed'} ${monitor.name}`);
 }
 
 async function saveSettings(monitor: MonitorWithSummary, changes: UpdateMonitorRequest): Promise<void> {
-  if (await perform(() => client.updateMonitor(monitor.id, changes), `Saved the settings of ${monitor.name}`)) settingsVersion.value++;
+  if (await action.perform(() => client.updateMonitor(monitor.id, changes), `Saved the settings of ${monitor.name}`)) settingsVersion.value++;
 }
 
 function finishApproval(monitor: MonitorWithSummary): Promise<void> {
   approving.value = false;
-  return completed(`Approved the new baseline of ${monitor.name}`);
+  return action.completed(`Approved the new baseline of ${monitor.name}`);
 }
 
 // There is no page left to reload once the monitor is gone, so only the sidebar counts are refreshed.
@@ -138,6 +129,9 @@ async function deleteMonitor(monitor: MonitorWithSummary): Promise<void> {
   await Promise.all([navCounts.refresh(), router.push('/monitors')]);
 }
 
+useVisibleInterval(() => {
+  void reload();
+}, REFRESH_MS);
 void reload();
 </script>
 
@@ -148,15 +142,16 @@ void reload();
     <span>{{ detail?.monitor.name ?? '' }}</span>
   </nav>
   <PageHeader :title="detail?.monitor.name ?? 'Monitor'">
+    <button type="button" class="btn" data-action="refresh" @click="reload()">Refresh</button>
     <template v-if="detail !== null">
       <StatusPill :health="detail.monitor.summary.health" :severity="detail.monitor.summary.openIncident?.severity ?? null" />
-      <button type="button" class="btn" data-action="toggle-status" :disabled="busy" @click="toggleStatus(detail.monitor)">{{ detail.monitor.status === 'active' ? 'Pause' : 'Resume' }}</button>
-      <button type="button" class="btn btn-primary" data-action="approve" :disabled="busy || !isDrifted" @click="approving = true">Approve new baseline</button>
+      <button type="button" class="btn" data-action="toggle-status" :disabled="action.busy.value" @click="toggleStatus(detail.monitor)">{{ detail.monitor.status === 'active' ? 'Pause' : 'Resume' }}</button>
+      <button type="button" class="btn btn-primary" data-action="approve" :disabled="action.busy.value || !isDrifted" @click="approving = true">Approve new baseline</button>
     </template>
   </PageHeader>
+  <ErrorBanner v-if="loadError !== null" :message="`Could not load this monitor: ${loadError}`" :showing-previous="detail !== null" @retry="reload()" />
   <div class="page-content">
-    <p v-if="loadError !== null" role="alert" class="error">{{ loadError }}</p>
-    <p v-else-if="detail === null" class="muted">Loading...</p>
+    <p v-if="detail === null && loadError === null" class="muted">Loading...</p>
     <template v-if="detail !== null">
       <p class="mono muted">{{ detail.monitor.url }}</p>
       <div class="stats">
@@ -186,7 +181,7 @@ void reload();
         v-else
         :key="settingsVersion"
         :monitor="detail.monitor"
-        :busy="busy"
+        :busy="action.busy.value"
         @save="saveSettings(detail.monitor, $event)"
         @delete="confirmingDelete = true"
       />
