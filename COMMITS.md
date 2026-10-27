@@ -2,6 +2,18 @@
 
 What each commit changed and why, newest first. An entry is written in the same commit it describes, so its hash is filled in by the commit after it (`pending` until then).
 
+## fe695d7: fix(api): seal the new tenant's API key instead of logging it
+
+On Cloud Run the create-tenant job's stdout goes to Cloud Logging, so printing the API key there left a working credential readable by everyone with log access. The command now takes `--recipient-key` (a base64 DER RSA public key of at least 2048 bits), prints the key encrypted to it (OAEP with sha256), and refuses to print it in plain text when stdout is not a terminal. The refusal happens before the tenant is created, so a missing key leaves nothing behind. Operators on the deployed system pass their public key in the job arguments and decrypt the logged value with the command in the README; a local run in a terminal still prints the key as before.
+
+## 0c48a6e: fix(network): cap response bodies in the guarded fetch
+
+The guarded fetch read whatever a monitored server sent, so a hostile or broken server could stream an unbounded body into memory. Responses are now capped at 4 MiB: a `content-length` above the cap is refused before any of the body is read, and a body that outgrows it while streaming errors with `ResponseTooLargeError` instead of being truncated. A probe or alert delivery against an oversized response now fails with that error, and normal tools/list responses are far below the cap.
+
+## f699b67: fix(alerting): escape Slack control characters in alert text
+
+Monitor, tool, prompt and resource names and URIs come from monitored servers, and Slack reads `<!channel>` or `<url|label>` in a message as a mention or a disguised link. An alert's text now escapes `&`, `<` and `>`, so those values show literally. Every run of line breaks inside one of those values is also replaced by a single space, so a server can no longer forge extra `- ...` lines or a second `Keelson:` headline inside a real alert. Names containing these characters now look slightly different in Slack, and nothing else about the alert changes.
+
 ## b6fcaf6: feat(dashboard): show description drift as a word-level diff
 
 A changed tool description used to show both full texts, which hid a one-word edit in a wall of text (a real Perplexity Docs drift on 2026-10-25 changed only a spec path and the order of a list). The drift view now diffs line by line, highlights only the words that changed, and collapses unchanged lines behind a toggle. No new dependency.
