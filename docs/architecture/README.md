@@ -47,6 +47,7 @@ Teams let AI agents call MCP servers they do not control. Such a server can go d
 | Probes per monitor per day | 96 | 24 × 4 |
 | Requests per probe | 4-6 HTTP requests (initialize, initialized, up to 3 list calls, pages) | MCP lifecycle |
 | Probe duration | under 10 s by budget; typically a few hundred ms | `PROBE_BUDGET_MS` |
+| Response size | at most 4 MiB per HTTP response; a large real tools page is a few hundred KB | `MAX_RESPONSE_BYTES` |
 | Rows written per probe | 1 probe row; snapshot only when the catalog changes; incident/outbox only on a state change | content addressing |
 | Capacity as deployed | 500 monitors per dispatch run (batch limit), 4,500 tasks per 15 min at the queue's 5/s | section 14 |
 
@@ -208,11 +209,11 @@ Every hop is at-least-once. Five mechanisms make duplicates harmless:
 
 ## 11. Security
 
-- **SSRF guard** (worker only, every probe and webhook delivery): resolves the host once, requires every address to be public, and connects to the checked address from the same lookup, so a rebinding DNS answer cannot slip in. Private, loopback, CGNAT, documentation, multicast and reserved ranges are refused for IPv4 and IPv6, IPv4-mapped IPv6 is judged by its IPv4 address, and **link-local (including `169.254.169.254`) is refused even in local development**. Redirects are followed manually, at most 5, each hop re-checked, credentials dropped across origins. Webhook deliveries never follow redirects.
+- **SSRF guard** (worker only, every probe and webhook delivery): resolves the host once, requires every address to be public, and connects to the checked address from the same lookup, so a rebinding DNS answer cannot slip in. Private, loopback, CGNAT, documentation, multicast and reserved ranges are refused for IPv4 and IPv6, IPv4-mapped IPv6 is judged by its IPv4 address, and **link-local (including `169.254.169.254`) is refused even in local development**. Redirects are followed manually, at most 5, each hop re-checked, credentials dropped across origins. Webhook deliveries never follow redirects. Every response body is capped at 4 MiB: a declared length above it is refused before reading, and a stream that grows past it errors instead of being truncated, so a hostile server cannot exhaust worker memory inside the 10 s budget.
 - **Service-to-service auth**: Google OIDC ID tokens with audience and allow-listed service-account checks in the application, on top of Cloud Run IAM for the worker. Static tokens exist only for local runs, and the default mode is OIDC.
 - **Least privilege**: one service account per role; the CI deployer has no IAM admin rights (identities and roles live in a bootstrap stack applied by a person); pull-request previews run as a read-only identity; secrets are scoped by name prefix.
-- **Secrets**: never stored in the database or Pulumi state; API keys stored as SHA-256 hashes; webhook signing secrets returned once.
-- **Untrusted content**: tool descriptions are stored verbatim and rendered as text only (no `v-html`), with a visible "treat as data" label; the MCP tool labels them untrusted.
+- **Secrets**: never stored in the database or Pulumi state; API keys stored as SHA-256 hashes; webhook signing secrets returned once. A new tenant's API key never reaches the logs: the `create-tenant` job has no terminal, so it requires the operator's RSA public key (`--recipient-key`) and logs only the key sealed with RSA-OAEP (SHA-256), which the operator opens locally with `openssl`. Run in a terminal, it prints the key once as before.
+- **Untrusted content**: tool descriptions are stored verbatim and rendered as text only (no `v-html`), with a visible "treat as data" label; the MCP tool labels them untrusted. Slack alerts escape `&`, `<` and `>` and collapse line breaks in every server- or tenant-supplied name, so a monitored server cannot ping a channel (`<!channel>`), plant a disguised link, or forge extra alert lines.
 
 ## 12. Deployment and operations
 
@@ -223,7 +224,7 @@ Every hop is at-least-once. Five mechanisms make duplicates harmless:
 
 ## 13. Testing
 
-863 test cases across 102 files: pure domain tests (canonicalisation, every change kind, schema classification, health transitions), use-case tests on in-memory ports with a fixed clock, adapter tests against real Postgres (Testcontainers), SSRF tests, Fastify inject tests for both services, Vue component tests, Pulumi mock tests for IAM and limits, and an end-to-end rug-pull test: register a monitor, baseline it, change the demo server's tool description, and assert exactly one critical drift incident and exactly one signed webhook delivery, and nothing on a repeat.
+891 test cases across 104 files: pure domain tests (canonicalisation, every change kind, schema classification, health transitions), use-case tests on in-memory ports with a fixed clock, adapter tests against real Postgres (Testcontainers), SSRF and response-size tests, alert-escaping tests, a round trip of the sealed API key, Fastify inject tests for both services, Vue component tests, Pulumi mock tests for IAM and limits, and an end-to-end rug-pull test: register a monitor, baseline it, change the demo server's tool description, and assert exactly one critical drift incident and exactly one signed webhook delivery, and nothing on a repeat.
 
 ## 14. Limits and the scaling path
 
