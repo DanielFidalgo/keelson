@@ -5,6 +5,8 @@ import { DestinationRefusedError, isPermittedAddress, type TargetPolicy } from '
 
 export const KEELSON_USER_AGENT = 'Keelson/0.1 (+https://github.com/DanielFidalgo/keelson/blob/main/docs/probes.md)';
 export const MAX_REDIRECTS = 5;
+// A large real tools/list page is a few hundred KB; anything beyond this is a hostile or broken server.
+export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 const INSECURE_PROTOCOL = 'http:';
 
@@ -72,6 +74,13 @@ export class RedirectLimitError extends Error {
   }
 }
 
+export class ResponseTooLargeError extends Error {
+  constructor() {
+    super(`response body exceeded ${String(MAX_RESPONSE_BYTES)} bytes`);
+    this.name = 'ResponseTooLargeError';
+  }
+}
+
 type FetchInit = NonNullable<Parameters<typeof undiciFetch>[1]>;
 
 function isReplayable(body: FetchInit['body']): boolean {
@@ -130,12 +139,50 @@ async function fetchFollowingRedirects(
   }
 }
 
+function declaresOversizedBody(response: Response): boolean {
+  const declared = Number(response.headers.get('content-length'));
+  return declared > MAX_RESPONSE_BYTES;
+}
+
+// Errors the stream rather than truncating it, so a caller never parses a silently cut-off body.
+// Erroring the transform also cancels the upstream, which stops the read.
+function limitedTo(maxBytes: number, body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  let bytesRead = 0;
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytesRead += chunk.byteLength;
+        if (bytesRead > maxBytes) throw new ResponseTooLargeError();
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+}
+
+// content-length is checked up front so an honest-but-huge response is refused before any of it is read.
+// A server that omits or understates it is caught by the running count instead.
+async function withBoundedBody(response: Response): Promise<Response> {
+  if (response.body === null) return response;
+  if (declaresOversizedBody(response)) {
+    await response.body.cancel();
+    throw new ResponseTooLargeError();
+  }
+  return new Response(limitedTo(MAX_RESPONSE_BYTES, response.body), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 export function createGuardedFetch(policy: TargetPolicy): typeof fetch {
   const dispatcher = new Agent({ connect: guardedConnector(policy) });
   return (input, init) => {
     if (input instanceof Request) throw new TypeError('guarded fetch takes a URL, not a Request');
     const headers = new Headers(init?.headers);
     headers.set('user-agent', KEELSON_USER_AGENT);
-    return fetchFollowingRedirects(dispatcher, new URL(input), { ...(init as FetchInit | undefined), headers: headerPairs(headers) });
+    return fetchFollowingRedirects(dispatcher, new URL(input), {
+      ...(init as FetchInit | undefined),
+      headers: headerPairs(headers),
+    }).then(withBoundedBody);
   };
 }

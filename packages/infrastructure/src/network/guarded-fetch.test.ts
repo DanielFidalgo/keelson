@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DestinationRefusedError } from './address-policy.js';
-import { createGuardedFetch, KEELSON_USER_AGENT, MAX_REDIRECTS } from './guarded-fetch.js';
+import {
+  createGuardedFetch,
+  KEELSON_USER_AGENT,
+  MAX_REDIRECTS,
+  MAX_RESPONSE_BYTES,
+  ResponseTooLargeError,
+} from './guarded-fetch.js';
 import { startTestHttpServer, type TestHttpServer } from './test-http-server.js';
 
 const permissive = { allowPrivateAddresses: true, allowHttp: true };
@@ -114,5 +120,65 @@ describe('guarded fetch', () => {
 
     await expect(createGuardedFetch(permissive)(`${server.origin}/0`)).rejects.toThrow();
     expect(server.requests.length).toBeLessThanOrEqual(MAX_REDIRECTS + 1);
+  });
+
+  it('reads a body of exactly the size cap in full', async () => {
+    const server = await serve((_request, response) => void response.end(Buffer.alloc(MAX_RESPONSE_BYTES)));
+
+    const response = await createGuardedFetch(permissive)(`${server.origin}/`);
+
+    expect((await response.arrayBuffer()).byteLength).toBe(MAX_RESPONSE_BYTES);
+  });
+
+  it('reads a chunked body at the size cap in full', async () => {
+    const chunkBytes = MAX_RESPONSE_BYTES / 4;
+    const server = await serve((_request, response) => {
+      for (let chunk = 0; chunk < 4; chunk += 1) response.write(Buffer.alloc(chunkBytes));
+      response.end();
+    });
+
+    const response = await createGuardedFetch(permissive)(`${server.origin}/`);
+
+    expect((await response.arrayBuffer()).byteLength).toBe(MAX_RESPONSE_BYTES);
+  });
+
+  it('rejects a response that declares a content-length above the size cap', async () => {
+    const server = await serve((_request, response) => {
+      response.writeHead(200, { 'content-length': String(MAX_RESPONSE_BYTES + 1) });
+      response.write(Buffer.alloc(1024));
+    });
+
+    const failure = await failureOf(createGuardedFetch(permissive)(`${server.origin}/`));
+
+    expect(failure).toBeInstanceOf(ResponseTooLargeError);
+  });
+
+  it('errors the body stream of a chunked response that streams past the size cap', async () => {
+    const server = await serve((_request, response) => {
+      response.write(Buffer.alloc(MAX_RESPONSE_BYTES));
+      response.end(Buffer.alloc(1));
+    });
+
+    const response = await createGuardedFetch(permissive)(`${server.origin}/`);
+
+    await expect(response.text()).rejects.toBeInstanceOf(ResponseTooLargeError);
+  });
+
+  it('resolves a response without a body', async () => {
+    const server = await serve((_request, response) => void response.writeHead(204).end());
+
+    const response = await createGuardedFetch(permissive)(`${server.origin}/`);
+
+    expect(response.status).toBe(204);
+  });
+
+  it('preserves status and headers of a response it wraps', async () => {
+    const server = await serve((_request, response) => {
+      response.writeHead(201, { 'x-probe': 'seen' }).end('created');
+    });
+
+    const response = await createGuardedFetch(permissive)(`${server.origin}/`);
+
+    expect([response.status, response.headers.get('x-probe'), await response.text()]).toEqual([201, 'seen', 'created']);
   });
 });
