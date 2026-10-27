@@ -108,10 +108,23 @@ The Pulumi programs are compiled before Pulumi runs them: `npm ci --prefix infra
 
 The first `pulumi up` can fail once on the alert policy while the log-based metric it counts is still propagating. Run it again.
 
-The deployed api and the demo server are open to the internet; the demo server's admin route needs its bearer token. To create a tenant on the deployed system, run the job with the name as an argument (a name cannot contain commas). The API key appears once in that execution's logs:
+The deployed api and the demo server are open to the internet; the demo server's admin route needs its bearer token. To create a tenant on the deployed system, run the job with the name and your public key as arguments (a name cannot contain commas). The job's output goes to Cloud Logging, so it refuses to print the API key in plain text and prints it encrypted to your key instead. Generate a key pair once:
 
 ```bash
-gcloud run jobs execute keelson-create-tenant --args=--name=<name> --project <project> --region <region> --wait
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out keelson-operator.pem
+```
+
+Then run the job, passing the public half as one line of base64:
+
+```bash
+gcloud run jobs execute keelson-create-tenant --project <project> --region <region> --wait \
+  --args=--name=<name>,--recipient-key=$(openssl pkey -in keelson-operator.pem -pubout -outform DER | base64 | tr -d '\n')
+```
+
+Copy the sealed key from that execution's logs and decrypt it with your private key. This is the only time the API key is shown:
+
+```bash
+echo <sealed> | base64 -d | openssl pkeyutl -decrypt -inkey keelson-operator.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
 ```
 
 ## Scaling path

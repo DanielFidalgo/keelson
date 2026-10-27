@@ -39,7 +39,9 @@ function createApiImageJob(name: string, script: string, { config, accounts, url
   });
 }
 
-// create-tenant takes its --name when executed: `gcloud run jobs execute keelson-create-tenant --args=--name=<name> --wait`.
+// create-tenant takes its arguments when executed: `gcloud run jobs execute keelson-create-tenant
+// --args=--name=<name>,--recipient-key=<base64 DER public key>`. The key is required because a Cloud Run job has no
+// terminal; see the deployed-system section of README.md.
 export function createJobs(inputs: JobInputs): { migrate: gcp.cloudrunv2.Job; createTenant: gcp.cloudrunv2.Job } {
   return {
     migrate: createApiImageJob('keelson-migrate', MIGRATE_SCRIPT, inputs),
