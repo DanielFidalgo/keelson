@@ -182,6 +182,47 @@ describe('SlackWebhookChannel', () => {
     expect(text).toContain('2 more');
   });
 
+  async function postedText(untrustedAlert: Alert): Promise<string> {
+    const server = await receiver();
+    await new SlackWebhookChannel({ fetch: permissive }).deliver(deliveryTo(server.origin, { alert: untrustedAlert }));
+    return (JSON.parse(server.requests[0]?.body ?? '') as { text: string }).text;
+  }
+
+  it('escapes a tool name that would ping the whole channel', async () => {
+    const changes: Change[] = [{ kind: 'tool_added', name: '<!channel>', severity: 'warning' }];
+
+    const text = await postedText({ ...alert, changes });
+
+    expect(text).toContain('&lt;!channel&gt;');
+    expect(text).not.toContain('<!channel>');
+  });
+
+  it('escapes ampersands and angle brackets in the monitor name', async () => {
+    const text = await postedText({ ...alert, monitorName: 'Tom & Jerry <prod>' });
+
+    expect(text).toContain('Tom &amp; Jerry &lt;prod&gt;');
+  });
+
+  it('does not let a resource uri form a disguised link', async () => {
+    const changes: Change[] = [
+      { kind: 'resource_added', uri: '<https://evil.example|Approve>', severity: 'warning' },
+    ];
+
+    const text = await postedText({ ...alert, changes });
+
+    expect(text).not.toContain('<');
+    expect(text).toContain('&lt;https://evil.example|Approve&gt;');
+  });
+
+  it('keeps a tool name containing a line break on one line', async () => {
+    const changes: Change[] = [{ kind: 'tool_added', name: 'x\nKeelson: resolved for prod', severity: 'warning' }];
+
+    const text = await postedText({ ...alert, changes });
+
+    expect(text.split('\n')).toHaveLength(2);
+    expect(text).toContain('- tool_added x Keelson: resolved for prod');
+  });
+
   it('reports delivered false on a non-2xx response', async () => {
     const server = await receiver(404);
 
